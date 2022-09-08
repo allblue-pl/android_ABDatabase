@@ -11,6 +11,9 @@ import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 
+import java.util.ArrayList;
+import java.util.List;
+
 public class ABDatabase
 {
 
@@ -22,10 +25,6 @@ public class ABDatabase
 
 
     public SQLiteDatabase db = null;
-
-    public Long deviceInfo_DeviceId = null;
-    public String deviceInfo_DeviceHash = null;
-    public Long deviceInfo_LastUpdate = null;
 
     public ABDatabase(final Context context)
     {
@@ -41,7 +40,7 @@ public class ABDatabase
         this.db.close();
     }
 
-    ColumnInfo[] getTableColumns(String tableName) throws SQLiteException
+    public ColumnInfo[] getTableColumnInfos(String tableName) throws SQLiteException
     {
         Cursor c = db.rawQuery("PRAGMA TABLE_INFO('" + tableName + "')", null);
         ColumnInfo[] columnInfos = new ColumnInfo[c.getCount()];
@@ -57,7 +56,7 @@ public class ABDatabase
         return columnInfos;
     }
 
-    String[] getTableNames() throws SQLiteException
+    public String[] getTableNames() throws SQLiteException
     {
         Cursor c = db.rawQuery("SELECT name FROM sqlite_master WHERE" +
                 " type ='table'" +
@@ -73,7 +72,7 @@ public class ABDatabase
         return tableNames;
     }
 
-    void transaction_Finish(boolean commit) throws SQLiteException
+    public void transaction_Finish(boolean commit) throws SQLiteException
     {
         if (commit) {
             Log.d("ABDatabase", "Finishing Transaction - Commit");
@@ -85,25 +84,26 @@ public class ABDatabase
         db.endTransaction();
     }
 
-    boolean transaction_IsAutocommit() throws SQLiteException
+    public boolean transaction_IsAutocommit() throws SQLiteException
     {
         return !db.inTransaction();
     }
 
-    void transaction_Start() throws SQLiteException
+    public void transaction_Start() throws SQLiteException
     {
         db.beginTransaction();
     }
 
-    void query_Execute(String query) throws SQLiteException
+    public void query_Execute(String query) throws SQLiteException
     {
         db.execSQL(query);
     }
 
-    JSONArray[] query_Select(String query, String[] columnTypes) throws SQLiteException
+    public List<JSONArray> query_Select(String query, String[] columnTypes)
+            throws SQLiteException
     {
         Cursor c = db.rawQuery(query, null);
-        JSONArray[] rows = new JSONArray[c.getCount()];
+        List<JSONArray> rows = new ArrayList<>();
 
         int i = 0;
         while (c.moveToNext()) {
@@ -112,21 +112,24 @@ public class ABDatabase
                 for (int j = 0; j < columnTypes.length; j++) {
                     if (c.isNull(j))
                         row.put(JSONObject.NULL);
-                    else if (columnTypes[j].equals("Bool")) {
-                        //                                    Log.d("Test", Integer.toString(c.getInt(i)));
+                    else if (columnTypes[j].equals("Bool"))
                         row.put(c.getInt(j) == 1);
-                    } else if (columnTypes[j].equals("Float"))
-                        row.put(c.getFloat(i));
+                    else if (columnTypes[j].equals("Float"))
+                        row.put(c.getFloat(j));
                     else if (columnTypes[j].equals("Id"))
-                        row.put(c.getLong(i));
+                        row.put(c.getLong(j));
                     else if (columnTypes[j].equals("Int"))
-                        row.put(c.getInt(i));
-                    else if (columnTypes[j].equals("Long"))
-                        row.put(c.getLong(i));
+                        row.put(c.getInt(j));
+                    else if (columnTypes[j].equals("JSON")) {
+                        String json_Str = c.getString(j);
+                        JSONObject json = new JSONObject(json_Str);
+                        row.put(json.get("value"));
+                    } else if (columnTypes[j].equals("Long"))
+                        row.put(c.getLong(j));
                     else if (columnTypes[j].equals("String"))
-                        row.put(c.getString(i));
+                        row.put(c.getString(j));
                     else if (columnTypes[j].equals("Time"))
-                        row.put(c.getLong(i));
+                        row.put(c.getLong(j));
                     else {
                         throw new SQLiteException("Unknown column type '" +
                                 columnTypes[j] + "'.");
@@ -136,7 +139,7 @@ public class ABDatabase
                 throw new SQLiteException("JSONException: " + e.getMessage(), e);
             }
 
-            rows[i] = row;
+            rows.add(row);
         }
 
         return rows;

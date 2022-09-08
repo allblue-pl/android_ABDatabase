@@ -13,17 +13,17 @@ public class ColumnInfo {
         this.notNull = notNull;
     }
 
-    String getName()
+    public String getName()
     {
         return this.name;
     }
 
-    String getType()
+    public String getType()
     {
         return this.type;
     }
 
-    boolean isNotNull()
+    public boolean isNotNull()
     {
         return this.notNull;
     }
