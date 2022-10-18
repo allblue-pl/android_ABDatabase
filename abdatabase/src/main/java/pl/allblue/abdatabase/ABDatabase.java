@@ -24,6 +24,12 @@ public class ABDatabase
     static private DatabaseHelper DatabaseHelperInstance = null;
 
 
+    static public void DeleteDatabase(Context context)
+    {
+        context.deleteDatabase("ab-database");
+    }
+
+
     public SQLiteDatabase db = null;
 
     public ABDatabase(final Context context)
@@ -31,8 +37,6 @@ public class ABDatabase
         if (ABDatabase.DatabaseHelperInstance == null)
             ABDatabase.DatabaseHelperInstance = new DatabaseHelper(context);
         this.db = ABDatabase.DatabaseHelperInstance.getWritableDatabase();
-        final SQLiteDatabase db = this.db;
-        final ABDatabase self = this;
     }
 
     public void close()
@@ -112,6 +116,8 @@ public class ABDatabase
                 for (int j = 0; j < columnTypes.length; j++) {
                     if (c.isNull(j))
                         row.put(JSONObject.NULL);
+                    else if (columnTypes[j].equals("AutoIncrementId"))
+                        row.put(c.getInt(j));
                     else if (columnTypes[j].equals("Bool"))
                         row.put(c.getInt(j) == 1);
                     else if (columnTypes[j].equals("Float"))
