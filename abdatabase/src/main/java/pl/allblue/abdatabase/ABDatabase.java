@@ -14,6 +14,8 @@ import org.json.JSONObject;
 import java.util.ArrayList;
 import java.util.List;
 
+import kotlinx.coroutines.Dispatchers;
+
 public class ABDatabase
 {
 
@@ -62,7 +64,7 @@ public class ABDatabase
 
     public String[] getTableNames() throws SQLiteException
     {
-        Cursor c = db.rawQuery("SELECT name FROM sqlite_master WHERE" +
+        Cursor c = this.db.rawQuery("SELECT name FROM sqlite_master WHERE" +
                 " type ='table'" +
                 " AND name NOT LIKE 'sqlite_%' AND name NOT LIKE 'android_%'", null);
         String[] tableNames = new String[c.getCount()];
@@ -78,14 +80,10 @@ public class ABDatabase
 
     public void transaction_Finish(boolean commit) throws SQLiteException
     {
-        if (commit) {
-            Log.d("ABDatabase", "Finishing Transaction - Commit");
-            db.setTransactionSuccessful();
-        } else {
-            Log.d("ABDatabase", "Finishing Transaction - Rollback");
-        }
+        if (commit)
+            this.db.setTransactionSuccessful();
 
-        db.endTransaction();
+        this.db.endTransaction();
     }
 
     public boolean transaction_IsAutocommit() throws SQLiteException
@@ -95,12 +93,12 @@ public class ABDatabase
 
     public void transaction_Start() throws SQLiteException
     {
-        db.beginTransaction();
+        this.db.beginTransaction();
     }
 
     public void query_Execute(String query) throws SQLiteException
     {
-        db.execSQL(query);
+        this.db.execSQL(query);
     }
 
     public List<JSONArray> query_Select(String query, String[] columnTypes)
