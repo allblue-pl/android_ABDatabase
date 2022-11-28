@@ -13,6 +13,8 @@ import org.json.JSONObject;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.locks.Lock;
+import java.util.concurrent.locks.ReentrantLock;
 
 import kotlinx.coroutines.Dispatchers;
 
@@ -22,6 +24,7 @@ public class ABDatabase
     static public final String FilePaths_DBRequests = "db-requests.json";
     static public final String FilePaths_DeviceInfo = "device-info.json";
     static public final String FilePaths_TableIds = "table-ids.json";
+
 
     static private DatabaseHelper DatabaseHelperInstance = null;
 
@@ -34,11 +37,24 @@ public class ABDatabase
 
     public SQLiteDatabase db = null;
 
+
+    private Lock lock = null;
+    private Integer transaction_NextId = null;
+    private Integer transaction_CurrentId = null;
+
+
     public ABDatabase(final Context context)
     {
+        this.lock = new ReentrantLock();
+        this.lock.lock();
+
         if (ABDatabase.DatabaseHelperInstance == null)
             ABDatabase.DatabaseHelperInstance = new DatabaseHelper(context);
         this.db = ABDatabase.DatabaseHelperInstance.getWritableDatabase();
+
+        this.transaction_NextId = 0;
+
+        this.lock.unlock();
     }
 
     public void close()
@@ -78,32 +94,105 @@ public class ABDatabase
         return tableNames;
     }
 
-    public void transaction_Finish(boolean commit) throws SQLiteException
+    public void transaction_Finish(int transactionId, boolean commit)
+            throws ABDatabaseException, SQLiteException
     {
+        this.lock.lock();
+
+        if (this.transaction_CurrentId == null)
+            throw new ABDatabaseException("No transaction in progress.");
+        if (this.transaction_CurrentId != transactionId)
+            throw new ABDatabaseException("Wrong transaction id.");
+
         if (commit)
             this.db.setTransactionSuccessful();
 
         this.db.endTransaction();
+
+        this.transaction_CurrentId = null;
+
+        this.lock.unlock();
     }
 
     public boolean transaction_IsAutocommit() throws SQLiteException
     {
-        return !db.inTransaction();
+        this.lock.lock();
+        boolean inTransaction = this.db.inTransaction();
+        this.lock.unlock();
+
+        return !inTransaction;
     }
 
-    public void transaction_Start() throws SQLiteException
+    public int transaction_Start() throws ABDatabaseException, SQLException
     {
+        this.lock.lock();
+
+        if (this.transaction_CurrentId != null)
+            throw new ABDatabaseException("Other transaction already in progress.");
+
         this.db.beginTransaction();
+
+        this.transaction_CurrentId = this.transaction_NextId;
+        this.transaction_NextId++;
+
+        this.lock.unlock();
+
+        return transaction_CurrentId;
     }
 
-    public void query_Execute(String query) throws SQLiteException
+    public void query_Execute(String query, Integer transactionId)
+            throws ABDatabaseException, SQLiteException
     {
+        this.lock.lock();
+
+        if (transactionId == null) {
+            if (this.transaction_CurrentId != null) {
+                throw new ABDatabaseException(
+                        "Transaction '" +
+                        this.transaction_CurrentId +
+                        "' in progress. Cannot run query: " + query);
+            }
+        } else {
+            if (this.transaction_CurrentId != transactionId) {
+                throw new ABDatabaseException(
+                        "Transaction '" + this.transaction_CurrentId +
+                        "' in progress. Cannot run query (transaction '" +
+                        transactionId + "'):" + query);
+            }
+        }
+
         this.db.execSQL(query);
+
+        this.lock.unlock();
     }
 
-    public List<JSONArray> query_Select(String query, String[] columnTypes)
-            throws SQLiteException
+    public void query_Execute(String query) throws ABDatabaseException,
+            SQLiteException
     {
+        this.query_Execute(query, null);
+    }
+
+    public List<JSONArray> query_Select(String query, String[] columnTypes,
+            Integer transactionId) throws ABDatabaseException, SQLiteException
+    {
+        this.lock.lock();
+
+        if (transactionId == null) {
+            if (this.transaction_CurrentId != null) {
+                throw new ABDatabaseException(
+                        "Transaction '" +
+                        this.transaction_CurrentId +
+                        "' in progress. Cannot run query: " + query);
+            }
+        } else {
+            if (this.transaction_CurrentId != transactionId) {
+                throw new ABDatabaseException(
+                        "Transaction '" + this.transaction_CurrentId +
+                        "' in progress. Cannot run query (transaction '" +
+                        transactionId + "'):" + query);
+            }
+        }
+
         Cursor c = db.rawQuery(query, null);
         List<JSONArray> rows = new ArrayList<>();
 
@@ -146,7 +235,15 @@ public class ABDatabase
             rows.add(row);
         }
 
+        this.lock.unlock();
+
         return rows;
+    }
+
+    public List<JSONArray> query_Select(String query, String[] columnTypes)
+            throws ABDatabaseException, SQLiteException
+    {
+        return this.query_Select(query, columnTypes, null);
     }
 
 }
