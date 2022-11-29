@@ -62,7 +62,7 @@ public class ABDatabase
         this.db.close();
     }
 
-    public ColumnInfo[] getTableColumnInfos(String tableName) throws SQLiteException
+    public ColumnInfo[] getTableColumnInfos(String tableName)
     {
         Cursor c = db.rawQuery("PRAGMA TABLE_INFO('" + tableName + "')", null);
         ColumnInfo[] columnInfos = new ColumnInfo[c.getCount()];
@@ -78,7 +78,7 @@ public class ABDatabase
         return columnInfos;
     }
 
-    public String[] getTableNames() throws SQLiteException
+    public String[] getTableNames()
     {
         Cursor c = this.db.rawQuery("SELECT name FROM sqlite_master WHERE" +
                 " type ='table'" +
@@ -95,14 +95,18 @@ public class ABDatabase
     }
 
     public void transaction_Finish(int transactionId, boolean commit)
-            throws ABDatabaseException, SQLiteException
+            throws ABDatabaseException
     {
         this.lock.lock();
 
-        if (this.transaction_CurrentId == null)
+        if (this.transaction_CurrentId == null) {
+            this.lock.unlock();
             throw new ABDatabaseException("No transaction in progress.");
-        if (this.transaction_CurrentId != transactionId)
+        }
+        if (this.transaction_CurrentId != transactionId) {
+            this.lock.unlock();
             throw new ABDatabaseException("Wrong transaction id.");
+        }
 
         if (commit)
             this.db.setTransactionSuccessful();
@@ -111,10 +115,12 @@ public class ABDatabase
 
         this.transaction_CurrentId = null;
 
+//        Log.d("Testing", "Transaction Finish");
+
         this.lock.unlock();
     }
 
-    public boolean transaction_IsAutocommit() throws SQLiteException
+    public boolean transaction_IsAutocommit()
     {
         this.lock.lock();
         boolean inTransaction = this.db.inTransaction();
@@ -127,8 +133,10 @@ public class ABDatabase
     {
         this.lock.lock();
 
-        if (this.transaction_CurrentId != null)
+        if (this.transaction_CurrentId != null) {
+            this.lock.unlock();
             throw new ABDatabaseException("Other transaction already in progress.");
+        }
 
         this.db.beginTransaction();
 
@@ -137,16 +145,19 @@ public class ABDatabase
 
         this.lock.unlock();
 
+//        Log.d("Testing", "Transaction Start");
+
         return transaction_CurrentId;
     }
 
     public void query_Execute(String query, Integer transactionId)
-            throws ABDatabaseException, SQLiteException
+            throws ABDatabaseException
     {
         this.lock.lock();
 
         if (transactionId == null) {
             if (this.transaction_CurrentId != null) {
+                this.lock.unlock();
                 throw new ABDatabaseException(
                         "Transaction '" +
                         this.transaction_CurrentId +
@@ -154,6 +165,7 @@ public class ABDatabase
             }
         } else {
             if (this.transaction_CurrentId != transactionId) {
+                this.lock.unlock();
                 throw new ABDatabaseException(
                         "Transaction '" + this.transaction_CurrentId +
                         "' in progress. Cannot run query (transaction '" +
@@ -161,24 +173,29 @@ public class ABDatabase
             }
         }
 
-        this.db.execSQL(query);
+        try {
+            this.db.execSQL(query);
+        } catch (SQLiteException e) {
+            this.lock.unlock();
+            throw new ABDatabaseException(e.getMessage(), e);
+        }
 
         this.lock.unlock();
     }
 
-    public void query_Execute(String query) throws ABDatabaseException,
-            SQLiteException
+    public void query_Execute(String query) throws ABDatabaseException
     {
         this.query_Execute(query, null);
     }
 
     public List<JSONArray> query_Select(String query, String[] columnTypes,
-            Integer transactionId) throws ABDatabaseException, SQLiteException
+            Integer transactionId) throws ABDatabaseException
     {
         this.lock.lock();
 
         if (transactionId == null) {
             if (this.transaction_CurrentId != null) {
+                this.lock.unlock();
                 throw new ABDatabaseException(
                         "Transaction '" +
                         this.transaction_CurrentId +
@@ -186,6 +203,7 @@ public class ABDatabase
             }
         } else {
             if (this.transaction_CurrentId != transactionId) {
+                this.lock.unlock();
                 throw new ABDatabaseException(
                         "Transaction '" + this.transaction_CurrentId +
                         "' in progress. Cannot run query (transaction '" +
@@ -193,7 +211,14 @@ public class ABDatabase
             }
         }
 
-        Cursor c = db.rawQuery(query, null);
+        Cursor c = null;
+        try {
+            c = db.rawQuery(query, null);
+        } catch (SQLiteException e) {
+            this.lock.unlock();
+            throw new ABDatabaseException(e.getMessage(), e);
+        }
+
         List<JSONArray> rows = new ArrayList<>();
 
         int i = 0;
@@ -224,12 +249,14 @@ public class ABDatabase
                     else if (columnTypes[j].equals("Time"))
                         row.put(c.getLong(j));
                     else {
-                        throw new SQLiteException("Unknown column type '" +
+                        this.lock.unlock();
+                        throw new ABDatabaseException("Unknown column type '" +
                                 columnTypes[j] + "'.");
                     }
                 }
             } catch (JSONException e) {
-                throw new SQLiteException("JSONException: " + e.getMessage(), e);
+                this.lock.unlock();
+                throw new ABDatabaseException("JSONException: " + e.getMessage(), e);
             }
 
             rows.add(row);
@@ -241,7 +268,7 @@ public class ABDatabase
     }
 
     public List<JSONArray> query_Select(String query, String[] columnTypes)
-            throws ABDatabaseException, SQLiteException
+            throws ABDatabaseException
     {
         return this.query_Select(query, columnTypes, null);
     }
