@@ -16,7 +16,9 @@ import java.util.List;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 
-public class ABDatabase
+/* ! Add Start Local Transaction In Safe, Locked Mode */
+
+public class ABDatabase_ToMakeOneThreaded
 {
 
     static public final String FilePaths_DBRequests = "db-requests.json";
@@ -41,14 +43,14 @@ public class ABDatabase
     private Integer transaction_CurrentId = null;
 
 
-    public ABDatabase(final Context context)
+    public ABDatabase_ToMakeOneThreaded(final Context context)
     {
         this.lock = new ReentrantLock();
         this.lock.lock();
 
-        if (ABDatabase.DatabaseHelperInstance == null)
-            ABDatabase.DatabaseHelperInstance = new DatabaseHelper(context);
-        this.db = ABDatabase.DatabaseHelperInstance.getWritableDatabase();
+        if (ABDatabase_ToMakeOneThreaded.DatabaseHelperInstance == null)
+            ABDatabase_ToMakeOneThreaded.DatabaseHelperInstance = new DatabaseHelper(context);
+        this.db = ABDatabase_ToMakeOneThreaded.DatabaseHelperInstance.getWritableDatabase();
         this.db.enableWriteAheadLogging();
         Log.d("TestingDB", "New DB");
 
@@ -97,9 +99,37 @@ public class ABDatabase
     public void transaction_Finish(int transactionId, boolean commit)
             throws ABDatabaseException
     {
+//        Log.d("DatabaseTest", "BL Transaction Finish " + transactionId);
         this.lock.lock();
+//        Log.d("DatabaseTest", "AL Transaction Finish " + transactionId);
+
+        if (this.transaction_CurrentId == null) {
+            this.resetConnection();
+//            Log.e("ABDatabase", "ABDatabaseException",
+//                    new ABDatabaseException("No transaction in progress"));
+
+            this.lock.unlock();
+            throw new ABDatabaseException("No transaction in progress.");
+
+        }
+        if (this.transaction_CurrentId != transactionId) {
+            this.resetConnection();
+//            Log.e("ABDatabase", "ABDatabaseException",
+//                    new ABDatabaseException("Wrong transaction id."));
+
+            this.lock.unlock();
+            throw new ABDatabaseException("Wrong transaction id.");
+        }
+
+        /* Temporary Fix */
+//        if (commit)
+//            this.db.setTransactionSuccessful();
+//
+//        this.db.endTransaction();
 
         this.transaction_CurrentId = null;
+
+//        Log.d("Testing", "Transaction Finish");
 
         this.lock.unlock();
     }
@@ -108,8 +138,9 @@ public class ABDatabase
     {
         this.lock.lock();
 
+        /* Temporary Fix */
         boolean inTransaction = this.transaction_CurrentId != null;
-
+//        boolean inTransaction = this.db.inTransaction();
         this.lock.unlock();
 
         return !inTransaction;
@@ -117,12 +148,28 @@ public class ABDatabase
 
     public int transaction_Start() throws ABDatabaseException, SQLException
     {
+        Log.d("DatabaseTest", "BL Transaction Start");
         this.lock.lock();
+        Log.d("DatabaseTest", "AL Transaction Start");
+
+        if (this.transaction_CurrentId != null) {
+            this.resetConnection();
+//            Log.e("ABDatabase", "ABDatabaseException",
+//                    new ABDatabaseException("Other transaction already in progress."));
+
+            this.lock.unlock();
+            throw new ABDatabaseException("Other transaction already in progress.");
+        }
+
+        /* Temporary Fix */
+//        this.db.beginTransactionNonExclusive();
 
         this.transaction_CurrentId = this.transaction_NextId;
         this.transaction_NextId++;
 
         this.lock.unlock();
+
+//        Log.d("Testing", "Transaction Start");
 
         return transaction_CurrentId;
     }
@@ -130,7 +177,40 @@ public class ABDatabase
     public void query_Execute(String query, Integer transactionId)
             throws ABDatabaseException
     {
+        Log.d("DatabaseTest", "BL Execute: " + query);
         this.lock.lock();
+        Log.d("DatabaseTest", "AL Execute: " + query);
+
+        if (transactionId == null) {
+            if (this.transaction_CurrentId != null) {
+                this.resetConnection();
+//                Log.e("ABDatabase", "ABDatabaseException",
+//                        new ABDatabaseException("Transaction '" +
+//                        this.transaction_CurrentId +
+//                        "' in progress. Cannot run query: " + query));
+
+                this.lock.unlock();
+                throw new ABDatabaseException(
+                        "Transaction '" +
+                        this.transaction_CurrentId +
+                        "' in progress. Cannot run query: " + query);
+            }
+        } else {
+            if (this.transaction_CurrentId != transactionId) {
+                this.resetConnection();
+//                Log.e("ABDatabase", "ABDatabaseException",
+//                        new ABDatabaseException("Transaction '" +
+//                                this.transaction_CurrentId +
+//                                "' in progress. Cannot run query (transaction '" +
+//                                transactionId + "'):" + query));
+
+                this.lock.unlock();
+                throw new ABDatabaseException(
+                        "Transaction '" + this.transaction_CurrentId +
+                        "' in progress. Cannot run query (transaction '" +
+                        transactionId + "'):" + query);
+            }
+        }
 
         try {
             this.db.execSQL(query);
@@ -150,7 +230,40 @@ public class ABDatabase
     public List<JSONArray> query_Select(String query, String[] columnTypes,
             Integer transactionId) throws ABDatabaseException
     {
+        Log.d("DatabaseTest", "BL Select: " + query);
         this.lock.lock();
+        Log.d("DatabaseTest", "AL Select: " + query);
+
+        if (transactionId == null) {
+            if (this.transaction_CurrentId != null) {
+                this.resetConnection();
+//                Log.e("ABDatabase", "ABDatabaseException",
+//                        new ABDatabaseException("Transaction '" +
+//                        this.transaction_CurrentId +
+//                        "' in progress. Cannot run query: " + query));
+
+                this.lock.unlock();
+                throw new ABDatabaseException(
+                        "Transaction '" +
+                        this.transaction_CurrentId +
+                        "' in progress. Cannot run query: " + query);
+            }
+        } else {
+            if (this.transaction_CurrentId != transactionId) {
+                this.resetConnection();
+//                Log.e("ABDatabase", "ABDatabaseException",
+//                        new ABDatabaseException("Transaction '" +
+//                        this.transaction_CurrentId +
+//                        "' in progress. Cannot run query (transaction '" +
+//                        transactionId + "'):" + query));
+
+                this.lock.unlock();
+                throw new ABDatabaseException(
+                        "Transaction '" + this.transaction_CurrentId +
+                        "' in progress. Cannot run query (transaction '" +
+                        transactionId + "'):" + query);
+            }
+        }
 
         Cursor c = null;
         try {
@@ -217,6 +330,11 @@ public class ABDatabase
 
     private void resetConnection()
     {
+        /* Temporary Fix */
+//        this.db.close();
+//        ABDatabase.DatabaseHelperInstance.close();
+//        this.db = ABDatabase.DatabaseHelperInstance.getWritableDatabase();
+//        this.db.enableWriteAheadLogging();
         this.transaction_CurrentId = null;
     }
 
