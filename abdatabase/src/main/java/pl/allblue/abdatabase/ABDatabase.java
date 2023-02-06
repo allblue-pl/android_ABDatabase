@@ -19,11 +19,6 @@ import java.util.concurrent.locks.ReentrantLock;
 public class ABDatabase
 {
 
-    static public final String FilePaths_DBRequests = "db-requests.json";
-    static public final String FilePaths_DeviceInfo = "device-info.json";
-    static public final String FilePaths_TableIds = "table-ids.json";
-
-
     static private DatabaseHelper DatabaseHelperInstance = null;
 
 
@@ -50,7 +45,6 @@ public class ABDatabase
             ABDatabase.DatabaseHelperInstance = new DatabaseHelper(context);
         this.db = ABDatabase.DatabaseHelperInstance.getWritableDatabase();
         this.db.enableWriteAheadLogging();
-        Log.d("TestingDB", "New DB");
 
         this.transaction_NextId = 0;
 
