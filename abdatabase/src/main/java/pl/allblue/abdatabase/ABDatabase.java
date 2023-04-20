@@ -2,9 +2,12 @@ package pl.allblue.abdatabase;
 
 import android.content.Context;
 import android.database.Cursor;
-import android.database.SQLException;
 import android.database.sqlite.SQLiteDatabase;
 import android.database.sqlite.SQLiteException;
+import android.os.Handler;
+import android.os.HandlerThread;
+import android.os.Looper;
+import android.os.Message;
 import android.util.Log;
 
 import org.json.JSONArray;
@@ -13,13 +16,20 @@ import org.json.JSONObject;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 
 public class ABDatabase
 {
 
-    static private DatabaseHelper DatabaseHelperInstance = null;
+    static private ReentrantLock Lock = null;
+    static private DatabaseHelper DBHelper = null;
+    static private SQLiteDatabase DB = null;
+
+    static private Handler RequestHandler = null;
+    static private HandlerThread RequestHandler_Thread = null;
+
+    static private Integer Transaction_NextId = null;
+    static private Integer Transaction_CurrentId = null;
 
 
     static public void DeleteDatabase(Context context)
@@ -28,190 +38,342 @@ public class ABDatabase
     }
 
 
-    public SQLiteDatabase db = null;
+    static public abstract class TableColumnInfosResultCallback
+    {
+        public abstract void onResult(ColumnInfo[] columnInfos);
+    }
 
+    static public abstract class IsAutocommitResultCallback
+    {
+        public abstract void onError(Exception e);
+        public abstract void onResult(boolean isAutocommit);
+    }
 
-    private Lock lock = null;
-    private Integer transaction_NextId = null;
-    private Integer transaction_CurrentId = null;
+    static public abstract class SelectResultCallback
+    {
+        public abstract void onError(Exception e);
+        public abstract void onResult(List<JSONArray> rows);
+    }
+
+    static public abstract class StartTransactionResultCallback
+    {
+        public abstract void onError(Exception e);
+        public abstract void onResult(int transactionId);
+    }
+
+    static public abstract class TableNamesResultCallback
+    {
+        public abstract void onResult(String[] tableNames);
+    }
+
+    static public abstract class VoidResultCallback
+    {
+        public abstract void onResult();
+    }
+
+    static public abstract class VoidResultCallback_ThrowsException
+            extends VoidResultCallback
+    {
+        public abstract void onError(Exception e);
+    }
 
 
     public ABDatabase(final Context context)
     {
-        this.lock = new ReentrantLock();
-        this.lock.lock();
+        if (ABDatabase.Lock == null)
+            ABDatabase.Lock = new ReentrantLock();
+        ABDatabase.Lock.lock();
 
-        if (ABDatabase.DatabaseHelperInstance == null)
-            ABDatabase.DatabaseHelperInstance = new DatabaseHelper(context);
-        this.db = ABDatabase.DatabaseHelperInstance.getWritableDatabase();
-        this.db.enableWriteAheadLogging();
-
-        this.transaction_NextId = 0;
-
-        this.lock.unlock();
-    }
-
-    public void close()
-    {
-        this.db.close();
-    }
-
-    public ColumnInfo[] getTableColumnInfos(String tableName)
-    {
-        Cursor c = db.rawQuery("PRAGMA TABLE_INFO('" + tableName + "')", null);
-        ColumnInfo[] columnInfos = new ColumnInfo[c.getCount()];
-
-        int i = 0;
-        while (c.moveToNext()) {
-            ColumnInfo columnInfo = new ColumnInfo(c.getString(1), c.getString(2),
-                    c.getInt(3) != 0);
-            columnInfos[i] = columnInfo;
-            i++;
+        if (ABDatabase.RequestHandler == null) {
+            ABDatabase.RequestHandler_Thread = new HandlerThread("ABDatabase");
+            ABDatabase.RequestHandler_Thread.start();
+            ABDatabase.RequestHandler = new Handler(
+                    ABDatabase.RequestHandler_Thread.getLooper());
         }
 
-        return columnInfos;
-    }
+        if (ABDatabase.DBHelper == null)
+            ABDatabase.DBHelper = new DatabaseHelper(context);
 
-    public String[] getTableNames()
-    {
-        Cursor c = this.db.rawQuery("SELECT name FROM sqlite_master WHERE" +
-                " type ='table'" +
-                " AND name NOT LIKE 'sqlite_%' AND name NOT LIKE 'android_%'", null);
-        String[] tableNames = new String[c.getCount()];
+        if (ABDatabase.DB == null) {
+            ABDatabase.DB = ABDatabase.DBHelper.getWritableDatabase();
+            ABDatabase.DB.enableWriteAheadLogging();
 
-        int i = 0;
-        while (c.moveToNext()) {
-            tableNames[i] = c.getString(0);
-            i++;
+            ABDatabase.Transaction_CurrentId = null;
+            ABDatabase.Transaction_NextId = 0;
         }
 
-        return tableNames;
+        ABDatabase.Lock.unlock();
     }
 
-    public void transaction_Finish(int transactionId, boolean commit)
-            throws ABDatabaseException
+    public void close(final Runnable callback)
     {
-        this.lock.lock();
+        ABDatabase.RequestHandler.post(() -> {
+            ABDatabase.Lock.lock();
 
-        this.transaction_CurrentId = null;
+            ABDatabase.DB.close();
+            if (callback != null)
+                ABDatabase.RequestHandler.post(callback);
 
-        this.lock.unlock();
+            ABDatabase.Lock.unlock();
+        });
     }
 
-    public boolean transaction_IsAutocommit()
+    public void getTableColumnInfos(String tableName,
+            TableColumnInfosResultCallback resultCallback)
     {
-        this.lock.lock();
+        ABDatabase.RequestHandler.post(() -> {
+            ABDatabase.Lock.lock();
 
-        boolean inTransaction = this.transaction_CurrentId != null;
+            Cursor c = ABDatabase.DB.rawQuery("PRAGMA TABLE_INFO('" +
+                    tableName + "')", null);
+            ColumnInfo[] columnInfos = new ColumnInfo[c.getCount()];
 
-        this.lock.unlock();
-
-        return !inTransaction;
-    }
-
-    public int transaction_Start() throws ABDatabaseException, SQLException
-    {
-        this.lock.lock();
-
-        this.transaction_CurrentId = this.transaction_NextId;
-        this.transaction_NextId++;
-
-        this.lock.unlock();
-
-        return transaction_CurrentId;
-    }
-
-    public void query_Execute(String query, Integer transactionId)
-            throws ABDatabaseException
-    {
-        this.lock.lock();
-
-        try {
-            this.db.execSQL(query);
-        } catch (SQLiteException e) {
-            this.lock.unlock();
-            throw new ABDatabaseException(e.getMessage(), e);
-        }
-
-        this.lock.unlock();
-    }
-
-    public void query_Execute(String query) throws ABDatabaseException
-    {
-        this.query_Execute(query, null);
-    }
-
-    public List<JSONArray> query_Select(String query, String[] columnTypes,
-            Integer transactionId) throws ABDatabaseException
-    {
-        this.lock.lock();
-
-        Cursor c = null;
-        try {
-            c = db.rawQuery(query, null);
-        } catch (SQLiteException e) {
-            this.lock.unlock();
-            throw new ABDatabaseException(e.getMessage(), e);
-        }
-
-        List<JSONArray> rows = new ArrayList<>();
-
-        int i = 0;
-        while (c.moveToNext()) {
-            JSONArray row = new JSONArray();
-            try {
-                for (int j = 0; j < columnTypes.length; j++) {
-                    if (c.isNull(j))
-                        row.put(JSONObject.NULL);
-                    else if (columnTypes[j].equals("AutoIncrementId"))
-                        row.put(c.getInt(j));
-                    else if (columnTypes[j].equals("Bool"))
-                        row.put(c.getInt(j) == 1);
-                    else if (columnTypes[j].equals("Float"))
-                        row.put(c.getFloat(j));
-                    else if (columnTypes[j].equals("Id"))
-                        row.put(c.getLong(j));
-                    else if (columnTypes[j].equals("Int"))
-                        row.put(c.getInt(j));
-                    else if (columnTypes[j].equals("JSON")) {
-                        String json_Str = c.getString(j);
-                        JSONObject json = new JSONObject(json_Str);
-                        row.put(json.get("value"));
-                    } else if (columnTypes[j].equals("Long"))
-                        row.put(c.getLong(j));
-                    else if (columnTypes[j].equals("String"))
-                        row.put(c.getString(j));
-                    else if (columnTypes[j].equals("Time"))
-                        row.put(c.getLong(j));
-                    else {
-                        this.lock.unlock();
-                        throw new ABDatabaseException("Unknown column type '" +
-                                columnTypes[j] + "'.");
-                    }
-                }
-            } catch (JSONException e) {
-                this.lock.unlock();
-                throw new ABDatabaseException("JSONException: " + e.getMessage(), e);
+            int i = 0;
+            while (c.moveToNext()) {
+                ColumnInfo columnInfo = new ColumnInfo(c.getString(1),
+                        c.getString(2), c.getInt(3) != 0);
+                columnInfos[i] = columnInfo;
+                i++;
             }
 
-            rows.add(row);
-        }
+            ABDatabase.Lock.unlock();
 
-        this.lock.unlock();
-
-        return rows;
+            resultCallback.onResult(columnInfos);
+        });
     }
 
-    public List<JSONArray> query_Select(String query, String[] columnTypes)
-            throws ABDatabaseException
+    public void getTableNames(TableNamesResultCallback resultCallback)
     {
-        return this.query_Select(query, columnTypes, null);
+        ABDatabase.RequestHandler.post(() -> {
+            ABDatabase.Lock.lock();
+
+            Cursor c = ABDatabase.DB.rawQuery(
+                    "SELECT name FROM sqlite_master WHERE" +
+                    " type ='table'" +
+                    " AND name NOT LIKE 'sqlite_%' AND name NOT LIKE 'android_%'", null);
+            String[] tableNames = new String[c.getCount()];
+
+            int i = 0;
+            while (c.moveToNext()) {
+                tableNames[i] = c.getString(0);
+                i++;
+            }
+
+            ABDatabase.Lock.unlock();
+
+            resultCallback.onResult(tableNames);
+        });
     }
 
-
-    private void resetConnection()
+    public void transaction_Finish(int transactionId, boolean commit,
+            VoidResultCallback_ThrowsException resultCallback)
     {
-        this.transaction_CurrentId = null;
+        ABDatabase.RequestHandler.post(() -> {
+            ABDatabase.Lock.lock();
+
+            if (ABDatabase.Transaction_CurrentId == null) {
+                ABDatabase.Lock.unlock();
+                resultCallback.onError(new ABDatabaseException(
+                        "No transaction in progress."));
+                return;
+            }
+
+            if (ABDatabase.Transaction_CurrentId != transactionId) {
+                ABDatabase.Lock.unlock();
+                resultCallback.onError(new ABDatabaseException(
+                        "Wrong transaction id: " + transactionId +
+                        ". Current transaction id: " +
+                        ABDatabase.Transaction_CurrentId + "."));
+                return;
+            }
+
+            if (commit)
+                ABDatabase.DB.setTransactionSuccessful();
+            ABDatabase.DB.endTransaction();
+
+            ABDatabase.Transaction_CurrentId = null;
+
+            ABDatabase.Lock.unlock();
+
+            resultCallback.onResult();
+        });
+    }
+
+    public void transaction_IsAutocommit(
+            IsAutocommitResultCallback resultCallback)
+    {
+        ABDatabase.RequestHandler.post(() -> {
+            ABDatabase.Lock.lock();
+
+            boolean inTransaction = ABDatabase.DB.inTransaction();
+
+            if (inTransaction != (ABDatabase.Transaction_CurrentId != null)) {
+                ABDatabase.Lock.unlock();
+                resultCallback.onError(new ABDatabaseException(
+                        "Transaction id inconsistency."));
+                return;
+            }
+
+            ABDatabase.Lock.unlock();
+
+            resultCallback.onResult(!inTransaction);
+        });
+    }
+
+    public void transaction_Start(StartTransactionResultCallback resultCallback)
+    {
+        ABDatabase.RequestHandler.post(() -> {
+            ABDatabase.Lock.lock();
+
+            if (ABDatabase.Transaction_CurrentId != null) {
+                ABDatabase.Lock.unlock();
+                resultCallback.onError(new ABDatabaseException(
+                        "Other transaction already in progress."));
+                return;
+            }
+
+            ABDatabase.DB.beginTransactionNonExclusive();
+
+            ABDatabase.Transaction_CurrentId = ABDatabase.Transaction_NextId;
+            ABDatabase.Transaction_NextId++;
+
+            ABDatabase.Lock.unlock();
+
+            resultCallback.onResult(ABDatabase.Transaction_CurrentId);
+        });
+    }
+
+    public void query_Execute(String query, Integer transactionId,
+            VoidResultCallback_ThrowsException resultCallback)
+    {
+        ABDatabase.RequestHandler.post(() -> {
+            ABDatabase.Lock.lock();
+
+            /* Transaction Check */
+            if (transactionId == null) {
+                if (ABDatabase.Transaction_CurrentId != null) {
+                    ABDatabase.Lock.unlock();
+                    resultCallback.onError(new ABDatabaseException(
+                            "Transaction in progress: " +
+                            ABDatabase.Transaction_CurrentId +
+                            ". Cannot run query: " + query));
+                    return;
+                }
+            } else {
+                if (ABDatabase.Transaction_CurrentId != transactionId) {
+                    ABDatabase.Lock.unlock();
+                    resultCallback.onError(new ABDatabaseException(
+                            "Wrong transaction id: " + transactionId +
+                            ". Current transaction id: " +
+                            ABDatabase.Transaction_CurrentId +
+                            ". Cannot run query: " + query));
+                    return;
+                }
+            }
+            /* / Transaction Check */
+
+            try {
+                ABDatabase.DB.execSQL(query);
+            } catch (SQLiteException e) {
+                ABDatabase.Lock.unlock();
+                resultCallback.onError(e);
+                return;
+            }
+
+            ABDatabase.Lock.unlock();
+
+            resultCallback.onResult();
+        });
+    }
+
+    public void query_Select(String query, String[] columnTypes,
+            Integer transactionId, SelectResultCallback resultCallback)
+    {
+        ABDatabase.RequestHandler.post(() -> {
+            ABDatabase.Lock.lock();
+
+            /* Transaction Check */
+            if (transactionId == null) {
+                if (ABDatabase.Transaction_CurrentId != null) {
+                    ABDatabase.Lock.unlock();
+                    resultCallback.onError(new ABDatabaseException(
+                            "Transaction in progress: " +
+                                    ABDatabase.Transaction_CurrentId +
+                                    ". Cannot run query: " + query));
+                    return;
+                }
+            } else {
+                if (ABDatabase.Transaction_CurrentId != transactionId) {
+                    ABDatabase.Lock.unlock();
+                    resultCallback.onError(new ABDatabaseException(
+                            "Wrong transaction id: " + transactionId +
+                                    ". Current transaction id: " +
+                                    ABDatabase.Transaction_CurrentId +
+                                    ". Cannot run query: " + query));
+                    return;
+                }
+            }
+            /* / Transaction Check */
+
+            Cursor c = null;
+            try {
+                c = ABDatabase.DB.rawQuery(query, null);
+            } catch (SQLiteException e) {
+                ABDatabase.Lock.unlock();
+                resultCallback.onError(e);
+                return;
+            }
+
+            List<JSONArray> rows = new ArrayList<>();
+
+            int i = 0;
+            while (c.moveToNext()) {
+                JSONArray row = new JSONArray();
+                try {
+                    for (int j = 0; j < columnTypes.length; j++) {
+                        if (c.isNull(j))
+                            row.put(JSONObject.NULL);
+                        else if (columnTypes[j].equals("AutoIncrementId"))
+                            row.put(c.getInt(j));
+                        else if (columnTypes[j].equals("Bool"))
+                            row.put(c.getInt(j) == 1);
+                        else if (columnTypes[j].equals("Float"))
+                            row.put(c.getFloat(j));
+                        else if (columnTypes[j].equals("Id"))
+                            row.put(c.getLong(j));
+                        else if (columnTypes[j].equals("Int"))
+                            row.put(c.getInt(j));
+                        else if (columnTypes[j].equals("JSON")) {
+                            String json_Str = c.getString(j);
+                            JSONObject json = new JSONObject(json_Str);
+                            row.put(json.get("value"));
+                        } else if (columnTypes[j].equals("Long"))
+                            row.put(c.getLong(j));
+                        else if (columnTypes[j].equals("String"))
+                            row.put(c.getString(j));
+                        else if (columnTypes[j].equals("Time"))
+                            row.put(c.getLong(j));
+                        else {
+                            ABDatabase.Lock.unlock();
+                            resultCallback.onError(new ABDatabaseException(
+                                    "Unknown column type '" + columnTypes[j] +
+                                            "'."));
+                            return;
+                        }
+                    }
+                } catch (JSONException e) {
+                    ABDatabase.Lock.unlock();
+                    resultCallback.onError(e);
+                    return;
+                }
+
+                rows.add(row);
+            }
+
+            ABDatabase.Lock.unlock();
+
+            resultCallback.onResult(rows);
+        });
     }
 
 }
