@@ -6,8 +6,6 @@ import android.database.sqlite.SQLiteDatabase;
 import android.database.sqlite.SQLiteException;
 import android.os.Handler;
 import android.os.HandlerThread;
-import android.os.Looper;
-import android.os.Message;
 import android.util.Log;
 
 import org.json.JSONArray;
@@ -28,7 +26,7 @@ public class ABDatabase
     static private Handler RequestHandler = null;
     static private HandlerThread RequestHandler_Thread = null;
 
-    static private Integer Transaction_NextId = null;
+    static private int Transaction_NextId = 0;
     static private Integer Transaction_CurrentId = null;
 
 
@@ -37,16 +35,21 @@ public class ABDatabase
         context.deleteDatabase("ab-database");
     }
 
-
-    static public abstract class TableColumnInfosResultCallback
+    static public boolean IsDebug()
     {
-        public abstract void onResult(ColumnInfo[] columnInfos);
+        return true;
     }
+
 
     static public abstract class IsAutocommitResultCallback
     {
         public abstract void onError(Exception e);
-        public abstract void onResult(boolean isAutocommit);
+        public abstract void onResult(Integer transactionId);
+    }
+
+    static public abstract class TableColumnInfosResultCallback
+    {
+        public abstract void onResult(ColumnInfo[] columnInfos);
     }
 
     static public abstract class SelectResultCallback
@@ -55,15 +58,21 @@ public class ABDatabase
         public abstract void onResult(List<JSONArray> rows);
     }
 
-    static public abstract class StartTransactionResultCallback
-    {
-        public abstract void onError(Exception e);
-        public abstract void onResult(int transactionId);
-    }
-
     static public abstract class TableNamesResultCallback
     {
         public abstract void onResult(String[] tableNames);
+    }
+
+    static public abstract class Transaction_FinishResultCallback
+    {
+        public abstract void onError(Exception e);
+        public abstract void onResult();
+    }
+
+    static public abstract class Transaction_StartResultCallback
+    {
+        public abstract void onError(Exception e);
+        public abstract void onResult(int transactionId);
     }
 
     static public abstract class VoidResultCallback
@@ -99,7 +108,6 @@ public class ABDatabase
             ABDatabase.DB.enableWriteAheadLogging();
 
             ABDatabase.Transaction_CurrentId = null;
-            ABDatabase.Transaction_NextId = 0;
         }
 
         ABDatabase.Lock.unlock();
@@ -166,8 +174,11 @@ public class ABDatabase
     }
 
     public void transaction_Finish(int transactionId, boolean commit,
-            VoidResultCallback_ThrowsException resultCallback)
+            Transaction_FinishResultCallback resultCallback)
     {
+        if (ABDatabase.IsDebug())
+            Log.d("ABDatabase", "Transaction - Finish", new Exception());
+
         ABDatabase.RequestHandler.post(() -> {
             ABDatabase.Lock.lock();
 
@@ -178,7 +189,7 @@ public class ABDatabase
                 return;
             }
 
-            if (ABDatabase.Transaction_CurrentId != transactionId) {
+            if (!ABDatabase.Transaction_CurrentId.equals(transactionId)) {
                 ABDatabase.Lock.unlock();
                 resultCallback.onError(new ABDatabaseException(
                         "Wrong transaction id: " + transactionId +
@@ -202,6 +213,11 @@ public class ABDatabase
     public void transaction_IsAutocommit(
             IsAutocommitResultCallback resultCallback)
     {
+        if (ABDatabase.IsDebug()) {
+            Log.d("ABDatabase", "Transaction - Is Autocommit",
+                    new Exception());
+        }
+
         ABDatabase.RequestHandler.post(() -> {
             ABDatabase.Lock.lock();
 
@@ -216,12 +232,15 @@ public class ABDatabase
 
             ABDatabase.Lock.unlock();
 
-            resultCallback.onResult(!inTransaction);
+            resultCallback.onResult(ABDatabase.Transaction_CurrentId);
         });
     }
 
-    public void transaction_Start(StartTransactionResultCallback resultCallback)
+    public void transaction_Start(Transaction_StartResultCallback resultCallback)
     {
+        if (ABDatabase.IsDebug())
+            Log.d("ABDatabase", "Transaction - Start", new Exception());
+
         ABDatabase.RequestHandler.post(() -> {
             ABDatabase.Lock.lock();
 
@@ -246,6 +265,9 @@ public class ABDatabase
     public void query_Execute(String query, Integer transactionId,
             VoidResultCallback_ThrowsException resultCallback)
     {
+        if (ABDatabase.IsDebug())
+            Log.d("ABDatabase", "Execute: " + query, new Exception());
+
         ABDatabase.RequestHandler.post(() -> {
             ABDatabase.Lock.lock();
 
@@ -260,7 +282,7 @@ public class ABDatabase
                     return;
                 }
             } else {
-                if (ABDatabase.Transaction_CurrentId != transactionId) {
+                if (!ABDatabase.Transaction_CurrentId.equals(transactionId)) {
                     ABDatabase.Lock.unlock();
                     resultCallback.onError(new ABDatabaseException(
                             "Wrong transaction id: " + transactionId +
@@ -289,6 +311,9 @@ public class ABDatabase
     public void query_Select(String query, String[] columnTypes,
             Integer transactionId, SelectResultCallback resultCallback)
     {
+        if (ABDatabase.IsDebug())
+            Log.d("ABDatabase", "Select: " + query, new Exception());
+
         ABDatabase.RequestHandler.post(() -> {
             ABDatabase.Lock.lock();
 
@@ -303,7 +328,7 @@ public class ABDatabase
                     return;
                 }
             } else {
-                if (ABDatabase.Transaction_CurrentId != transactionId) {
+                if (!ABDatabase.Transaction_CurrentId.equals(transactionId)) {
                     ABDatabase.Lock.unlock();
                     resultCallback.onError(new ABDatabaseException(
                             "Wrong transaction id: " + transactionId +
