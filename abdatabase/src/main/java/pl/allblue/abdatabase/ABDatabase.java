@@ -278,7 +278,7 @@ public class ABDatabase
                     resultCallback.onError(new ABDatabaseException(
                             "Transaction in progress: " +
                             ABDatabase.Transaction_CurrentId +
-                            ". Cannot run query: " + query));
+                            ". Cannot run query without transaction: " + query));
                     return;
                 }
             } else {
@@ -323,8 +323,8 @@ public class ABDatabase
                     ABDatabase.Lock.unlock();
                     resultCallback.onError(new ABDatabaseException(
                             "Transaction in progress: " +
-                                    ABDatabase.Transaction_CurrentId +
-                                    ". Cannot run query: " + query));
+                            ABDatabase.Transaction_CurrentId +
+                            ". Cannot run query without transaction id: " + query));
                     return;
                 }
             } else {
@@ -332,9 +332,9 @@ public class ABDatabase
                     ABDatabase.Lock.unlock();
                     resultCallback.onError(new ABDatabaseException(
                             "Wrong transaction id: " + transactionId +
-                                    ". Current transaction id: " +
-                                    ABDatabase.Transaction_CurrentId +
-                                    ". Cannot run query: " + query));
+                            ". Current transaction id: " +
+                            ABDatabase.Transaction_CurrentId +
+                            ". Cannot run query: " + query));
                     return;
                 }
             }
