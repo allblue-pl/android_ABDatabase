@@ -119,6 +119,7 @@ public class ABDatabase
             ABDatabase.Lock.lock();
 
             ABDatabase.DB.close();
+            ABDatabase.DB = null;
             if (callback != null)
                 ABDatabase.RequestHandler.post(callback);
 
