@@ -118,7 +118,8 @@ public class ABDatabase
         ABDatabase.RequestHandler.post(() -> {
             ABDatabase.Lock.lock();
 
-            ABDatabase.DB.close();
+            if (ABDatabase.DB != null)
+                ABDatabase.DB.close();
             ABDatabase.DB = null;
             if (callback != null)
                 ABDatabase.RequestHandler.post(callback);
