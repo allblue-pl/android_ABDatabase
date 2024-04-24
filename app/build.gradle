@@ -3,12 +3,13 @@ plugins {
 }
 
 android {
-    compileSdk 32
+	namespace "pl.allblue.abbluetoothprinter"
+    compileSdk 34
 
     defaultConfig {
         applicationId "pl.allblue.abdatabase"
-        minSdk 19
-        targetSdk 32
+        minSdk 23
+        targetSdk 34
         versionCode 1
         versionName "0.0.1"
 
