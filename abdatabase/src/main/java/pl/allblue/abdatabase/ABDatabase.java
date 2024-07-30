@@ -6,6 +6,7 @@ import android.database.sqlite.SQLiteDatabase;
 import android.database.sqlite.SQLiteException;
 import android.os.Handler;
 import android.os.HandlerThread;
+import android.os.Looper;
 import android.util.Log;
 
 import org.json.JSONArray;
@@ -238,7 +239,8 @@ public class ABDatabase
         });
     }
 
-    public void transaction_Start(Transaction_StartResultCallback resultCallback)
+    public void transaction_Start(Transaction_StartResultCallback resultCallback,
+            int timeout)
     {
         if (ABDatabase.IsDebug())
             Log.d("ABDatabase", "Transaction - Start", new Exception());
@@ -248,8 +250,16 @@ public class ABDatabase
 
             if (ABDatabase.Transaction_CurrentId != null) {
                 ABDatabase.Lock.unlock();
-                resultCallback.onError(new ABDatabaseException(
-                        "Other transaction already in progress."));
+                if (timeout <= 0) {
+                    resultCallback.onError(new ABDatabaseException(
+                            "Other transaction already in progress: " +
+                            ABDatabase.Transaction_CurrentId));
+                } else {
+                    ABDatabase.RequestHandler.postDelayed(() -> {
+                        this.transaction_Start(resultCallback,
+                                timeout - 500);
+                    }, 500);
+                }
                 return;
             }
 
@@ -264,8 +274,13 @@ public class ABDatabase
         });
     }
 
+    public void transaction_Start(Transaction_StartResultCallback resultCallback)
+    {
+        this.transaction_Start(resultCallback, 0);
+    }
+
     public void query_Execute(String query, Integer transactionId,
-            VoidResultCallback_ThrowsException resultCallback)
+            VoidResultCallback_ThrowsException resultCallback, int timeout)
     {
         if (ABDatabase.IsDebug())
             Log.d("ABDatabase", "Execute: " + query, new Exception());
@@ -277,10 +292,17 @@ public class ABDatabase
             if (transactionId == null) {
                 if (ABDatabase.Transaction_CurrentId != null) {
                     ABDatabase.Lock.unlock();
-                    resultCallback.onError(new ABDatabaseException(
-                            "Transaction in progress: " +
-                            ABDatabase.Transaction_CurrentId +
-                            ". Cannot run query without transaction: " + query));
+                    if (timeout <= 0) {
+                        resultCallback.onError(new ABDatabaseException(
+                                "Transaction in progress: " +
+                                        ABDatabase.Transaction_CurrentId +
+                                        ". Cannot run query without transaction: " + query));
+                    } else {
+                        ABDatabase.RequestHandler.postDelayed(() -> {
+                            this.query_Execute(query, transactionId,
+                                    resultCallback, timeout - 500);
+                        }, 500);
+                    }
                     return;
                 }
             } else {
@@ -310,8 +332,15 @@ public class ABDatabase
         });
     }
 
+    public void query_Execute(String query, Integer transactionId,
+                              VoidResultCallback_ThrowsException resultCallback)
+    {
+        this.query_Execute(query, transactionId, resultCallback, 0);
+    }
+
     public void query_Select(String query, String[] columnTypes,
-            Integer transactionId, SelectResultCallback resultCallback)
+            Integer transactionId, SelectResultCallback resultCallback,
+            int timeout)
     {
         if (ABDatabase.IsDebug())
             Log.d("ABDatabase", "Select: " + query, new Exception());
@@ -323,10 +352,17 @@ public class ABDatabase
             if (transactionId == null) {
                 if (ABDatabase.Transaction_CurrentId != null) {
                     ABDatabase.Lock.unlock();
-                    resultCallback.onError(new ABDatabaseException(
-                            "Transaction in progress: " +
-                            ABDatabase.Transaction_CurrentId +
-                            ". Cannot run query without transaction id: " + query));
+                    if (timeout <= 0) {
+                        resultCallback.onError(new ABDatabaseException(
+                                "Transaction in progress: " +
+                                ABDatabase.Transaction_CurrentId +
+                                ". Cannot run query without transaction id: " + query));
+                    } else {
+                        ABDatabase.RequestHandler.postDelayed(() -> {
+                            this.query_Select(query, columnTypes, transactionId,
+                                    resultCallback, timeout - 500);
+                        }, 500);
+                    }
                     return;
                 }
             } else {
@@ -401,6 +437,13 @@ public class ABDatabase
 
             resultCallback.onResult(rows);
         });
+    }
+
+    public void query_Select(String query, String[] columnTypes,
+            Integer transactionId, SelectResultCallback resultCallback)
+    {
+        this.query_Select(query, columnTypes, transactionId, resultCallback,
+                0);
     }
 
 }
