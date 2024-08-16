@@ -6,7 +6,6 @@ import android.database.sqlite.SQLiteDatabase;
 import android.database.sqlite.SQLiteException;
 import android.os.Handler;
 import android.os.HandlerThread;
-import android.os.Looper;
 import android.util.Log;
 
 import org.json.JSONArray;
@@ -31,60 +30,14 @@ public class ABDatabase
     static private Integer Transaction_CurrentId = null;
 
 
-    static public void DeleteDatabase(Context context)
+    static public void deleteDatabase(Context context)
     {
         context.deleteDatabase("ab-database");
     }
 
-    static public boolean IsDebug()
+    static public boolean isDebug()
     {
         return true;
-    }
-
-
-    static public abstract class IsAutocommitResultCallback
-    {
-        public abstract void onError(Exception e);
-        public abstract void onResult(Integer transactionId);
-    }
-
-    static public abstract class TableColumnInfosResultCallback
-    {
-        public abstract void onResult(ColumnInfo[] columnInfos);
-    }
-
-    static public abstract class SelectResultCallback
-    {
-        public abstract void onError(Exception e);
-        public abstract void onResult(List<JSONArray> rows);
-    }
-
-    static public abstract class TableNamesResultCallback
-    {
-        public abstract void onResult(String[] tableNames);
-    }
-
-    static public abstract class Transaction_FinishResultCallback
-    {
-        public abstract void onError(Exception e);
-        public abstract void onResult();
-    }
-
-    static public abstract class Transaction_StartResultCallback
-    {
-        public abstract void onError(Exception e);
-        public abstract void onResult(int transactionId);
-    }
-
-    static public abstract class VoidResultCallback
-    {
-        public abstract void onResult();
-    }
-
-    static public abstract class VoidResultCallback_ThrowsException
-            extends VoidResultCallback
-    {
-        public abstract void onError(Exception e);
     }
 
 
@@ -130,7 +83,7 @@ public class ABDatabase
     }
 
     public void getTableColumnInfos(String tableName,
-            TableColumnInfosResultCallback resultCallback)
+            Result.OnTableColumnInfos resultCallback)
     {
         ABDatabase.RequestHandler.post(() -> {
             ABDatabase.Lock.lock();
@@ -153,7 +106,7 @@ public class ABDatabase
         });
     }
 
-    public void getTableNames(TableNamesResultCallback resultCallback)
+    public void getTableNames(Result.OnTableNames resultCallback)
     {
         ABDatabase.RequestHandler.post(() -> {
             ABDatabase.Lock.lock();
@@ -177,9 +130,9 @@ public class ABDatabase
     }
 
     public void transaction_Finish(int transactionId, boolean commit,
-            Transaction_FinishResultCallback resultCallback)
+            Transaction.OnFinish resultCallback)
     {
-        if (ABDatabase.IsDebug())
+        if (ABDatabase.isDebug())
             Log.d("ABDatabase", "Transaction - Finish", new Exception());
 
         ABDatabase.RequestHandler.post(() -> {
@@ -214,9 +167,9 @@ public class ABDatabase
     }
 
     public void transaction_IsAutocommit(
-            IsAutocommitResultCallback resultCallback)
+            Transaction.OnIsAutocommit resultCallback)
     {
-        if (ABDatabase.IsDebug()) {
+        if (ABDatabase.isDebug()) {
             Log.d("ABDatabase", "Transaction - Is Autocommit",
                     new Exception());
         }
@@ -239,10 +192,10 @@ public class ABDatabase
         });
     }
 
-    public void transaction_Start(Transaction_StartResultCallback resultCallback,
+    public void transaction_Start(Transaction.OnStart resultCallback,
             int timeout)
     {
-        if (ABDatabase.IsDebug())
+        if (ABDatabase.isDebug())
             Log.d("ABDatabase", "Transaction - Start", new Exception());
 
         ABDatabase.RequestHandler.post(() -> {
@@ -274,15 +227,15 @@ public class ABDatabase
         });
     }
 
-    public void transaction_Start(Transaction_StartResultCallback resultCallback)
+    public void transaction_Start(Transaction.OnStart resultCallback)
     {
         this.transaction_Start(resultCallback, 0);
     }
 
     public void query_Execute(String query, Integer transactionId,
-            VoidResultCallback_ThrowsException resultCallback, int timeout)
+            Result.OnResult_ThrowsException resultCallback, int timeout)
     {
-        if (ABDatabase.IsDebug())
+        if (ABDatabase.isDebug())
             Log.d("ABDatabase", "Execute: " + query, new Exception());
 
         ABDatabase.RequestHandler.post(() -> {
@@ -333,16 +286,16 @@ public class ABDatabase
     }
 
     public void query_Execute(String query, Integer transactionId,
-                              VoidResultCallback_ThrowsException resultCallback)
+            Result.OnResult_ThrowsException resultCallback)
     {
         this.query_Execute(query, transactionId, resultCallback, 0);
     }
 
-    public void query_Select(String query, String[] columnTypes,
-            Integer transactionId, SelectResultCallback resultCallback,
+    public void query_Select(String query, SelectColumnType[] columnTypes,
+            Integer transactionId, Result.OnSelect resultCallback,
             int timeout)
     {
-        if (ABDatabase.IsDebug())
+        if (ABDatabase.isDebug())
             Log.d("ABDatabase", "Select: " + query, new Exception());
 
         ABDatabase.RequestHandler.post(() -> {
@@ -396,26 +349,20 @@ public class ABDatabase
                     for (int j = 0; j < columnTypes.length; j++) {
                         if (c.isNull(j))
                             row.put(JSONObject.NULL);
-                        else if (columnTypes[j].equals("AutoIncrementId"))
-                            row.put(c.getInt(j));
-                        else if (columnTypes[j].equals("Bool"))
+                        else if (columnTypes[j] == SelectColumnType.Bool)
                             row.put(c.getInt(j) == 1);
-                        else if (columnTypes[j].equals("Float"))
+                        else if (columnTypes[j] == SelectColumnType.Float)
                             row.put(c.getFloat(j));
-                        else if (columnTypes[j].equals("Id"))
-                            row.put(c.getLong(j));
-                        else if (columnTypes[j].equals("Int"))
+                        else if (columnTypes[j] == SelectColumnType.Int)
                             row.put(c.getInt(j));
-                        else if (columnTypes[j].equals("JSON")) {
+                        else if (columnTypes[j] == SelectColumnType.JSON) {
                             String json_Str = c.getString(j);
                             JSONObject json = new JSONObject(json_Str);
                             row.put(json.get("value"));
-                        } else if (columnTypes[j].equals("Long"))
+                        } else if (columnTypes[j] == SelectColumnType.Long)
                             row.put(c.getLong(j));
-                        else if (columnTypes[j].equals("String"))
+                        else if (columnTypes[j] == SelectColumnType.String)
                             row.put(c.getString(j));
-                        else if (columnTypes[j].equals("Time"))
-                            row.put(c.getLong(j));
                         else {
                             ABDatabase.Lock.unlock();
                             resultCallback.onError(new ABDatabaseException(
@@ -439,8 +386,8 @@ public class ABDatabase
         });
     }
 
-    public void query_Select(String query, String[] columnTypes,
-            Integer transactionId, SelectResultCallback resultCallback)
+    public void query_Select(String query, SelectColumnType[] columnTypes,
+            Integer transactionId, Result.OnSelect resultCallback)
     {
         this.query_Select(query, columnTypes, transactionId, resultCallback,
                 0);
