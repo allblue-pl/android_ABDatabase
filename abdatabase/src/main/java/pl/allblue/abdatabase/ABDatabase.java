@@ -386,7 +386,24 @@ public class ABDatabase
         });
     }
 
+    public void query_Select(String query, List<SelectColumnType> columnTypes,
+            Integer transactionId, Result.OnSelect resultCallback,
+            int timeout) {
+        SelectColumnType[] columnTypesArr =
+                new SelectColumnType[columnTypes.size()];
+        columnTypes.toArray(columnTypesArr);
+        this.query_Select(query, columnTypesArr, transactionId, resultCallback,
+                timeout);
+    }
+
     public void query_Select(String query, SelectColumnType[] columnTypes,
+            Integer transactionId, Result.OnSelect resultCallback)
+    {
+        this.query_Select(query, columnTypes, transactionId, resultCallback,
+                0);
+    }
+
+    public void query_Select(String query, List<SelectColumnType> columnTypes,
             Integer transactionId, Result.OnSelect resultCallback)
     {
         this.query_Select(query, columnTypes, transactionId, resultCallback,
