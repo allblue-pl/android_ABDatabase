@@ -7,30 +7,27 @@ import java.util.List;
 public class Result
 {
 
-    static public abstract class OnResult
-    {
+    static public abstract class OnResult {
         public abstract void onResult();
     }
 
     static public abstract class OnResult_ThrowsException
-            extends OnResult
-    {
+            extends OnResult {
         public abstract void onError(Exception e);
     }
 
-    static public abstract class OnSelect
-    {
+    static public abstract class OnSelect {
         public abstract void onError(Exception e);
         public abstract void onResult(List<JSONArray> rows);
     }
 
-    static public abstract class OnTableColumnInfos
-    {
+    static public abstract class OnTableColumnInfos {
+        public abstract void onError(Exception e);
         public abstract void onResult(ColumnInfo[] columnInfos);
     }
 
-    static public abstract class OnTableNames
-    {
+    static public abstract class OnTableNames {
+        public abstract void onError(Exception e);
         public abstract void onResult(String[] tableNames);
     }
 

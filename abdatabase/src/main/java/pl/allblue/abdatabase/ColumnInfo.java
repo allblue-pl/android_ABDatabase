@@ -6,25 +6,21 @@ public class ColumnInfo {
     private String type = null;
     private boolean notNull = false;
 
-    public ColumnInfo(String name, String type, boolean notNull)
-    {
+    public ColumnInfo(String name, String type, boolean notNull) {
         this.name = name;
         this.type = type;
         this.notNull = notNull;
     }
 
-    public String getName()
-    {
+    public String getName() {
         return this.name;
     }
 
-    public String getType()
-    {
+    public String getType() {
         return this.type;
     }
 
-    public boolean isNotNull()
-    {
+    public boolean isNotNull() {
         return this.notNull;
     }
 

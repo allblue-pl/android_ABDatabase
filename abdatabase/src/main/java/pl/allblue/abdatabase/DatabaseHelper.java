@@ -7,8 +7,7 @@ import android.database.sqlite.SQLiteOpenHelper;
 public class DatabaseHelper extends SQLiteOpenHelper
 {
 
-    static public String EscapeString(String str)
-    {
+    static public String EscapeString(String str) {
         if (str == null)
             return "NULL";
 
@@ -23,20 +22,17 @@ public class DatabaseHelper extends SQLiteOpenHelper
     }
 
 
-    public DatabaseHelper(Context context)
-    {
+    public DatabaseHelper(Context context) {
         super(context, "ab-database", null, 1);
     }
 
     @Override
-    public void onCreate(SQLiteDatabase db)
-    {
+    public void onCreate(SQLiteDatabase db) {
 
     }
 
     @Override
-    public void onUpgrade(SQLiteDatabase sqLiteDatabase, int i, int i1)
-    {
+    public void onUpgrade(SQLiteDatabase sqLiteDatabase, int i, int i1) {
 
     }
 

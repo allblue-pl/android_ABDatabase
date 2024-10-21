@@ -19,76 +19,79 @@ import java.util.concurrent.locks.ReentrantLock;
 public class ABDatabase
 {
 
-    static private ReentrantLock Lock = null;
-    static private DatabaseHelper DBHelper = null;
-    static private SQLiteDatabase DB = null;
+    static private ReentrantLock lock = null;
+    static private DatabaseHelper dbHelper = null;
+    static private SQLiteDatabase db = null;
 
-    static private Handler RequestHandler = null;
-    static private HandlerThread RequestHandler_Thread = null;
+    static private Handler requestHandler = null;
+    static private HandlerThread requestHandler_Thread = null;
 
-    static private int Transaction_NextId = 0;
-    static private Integer Transaction_CurrentId = null;
+    static private int transaction_NextId = 0;
+    static private Integer transaction_CurrentId = null;
 
 
-    static public void deleteDatabase(Context context)
-    {
+    static public void deleteDatabase(Context context) {
         context.deleteDatabase("ab-database");
     }
 
-    static public boolean isDebug()
-    {
+    static public boolean isDebug() {
         return true;
     }
 
 
-    public ABDatabase(final Context context)
-    {
-        if (ABDatabase.Lock == null)
-            ABDatabase.Lock = new ReentrantLock();
-        ABDatabase.Lock.lock();
+    public ABDatabase(final Context context) {
+        if (ABDatabase.lock == null)
+            ABDatabase.lock = new ReentrantLock();
+        ABDatabase.lock.lock();
 
-        if (ABDatabase.RequestHandler == null) {
-            ABDatabase.RequestHandler_Thread = new HandlerThread("ABDatabase");
-            ABDatabase.RequestHandler_Thread.start();
-            ABDatabase.RequestHandler = new Handler(
-                    ABDatabase.RequestHandler_Thread.getLooper());
+        if (ABDatabase.requestHandler == null) {
+            ABDatabase.requestHandler_Thread = new HandlerThread("ABDatabase");
+            ABDatabase.requestHandler_Thread.start();
+            ABDatabase.requestHandler = new Handler(
+                    ABDatabase.requestHandler_Thread.getLooper());
         }
 
-        if (ABDatabase.DBHelper == null)
-            ABDatabase.DBHelper = new DatabaseHelper(context);
+        if (ABDatabase.dbHelper == null)
+            ABDatabase.dbHelper = new DatabaseHelper(context);
 
-        if (ABDatabase.DB == null) {
-            ABDatabase.DB = ABDatabase.DBHelper.getWritableDatabase();
-            ABDatabase.DB.enableWriteAheadLogging();
+        if (ABDatabase.db == null) {
+            ABDatabase.db = ABDatabase.dbHelper.getWritableDatabase();
+            ABDatabase.db.enableWriteAheadLogging();
 
-            ABDatabase.Transaction_CurrentId = null;
+            ABDatabase.transaction_CurrentId = null;
         }
 
-        ABDatabase.Lock.unlock();
+        ABDatabase.lock.unlock();
     }
 
-    public void close(final Runnable callback)
-    {
-        ABDatabase.RequestHandler.post(() -> {
-            ABDatabase.Lock.lock();
+    public void close(final Runnable callback) {
+        ABDatabase.requestHandler.post(() -> {
+            ABDatabase.lock.lock();
 
-            if (ABDatabase.DB != null)
-                ABDatabase.DB.close();
-            ABDatabase.DB = null;
+            if (ABDatabase.db != null)
+                ABDatabase.db.close();
+            ABDatabase.db = null;
             if (callback != null)
-                ABDatabase.RequestHandler.post(callback);
+                ABDatabase.requestHandler.post(callback);
 
-            ABDatabase.Lock.unlock();
+            ABDatabase.lock.unlock();
         });
     }
 
-    public void getTableColumnInfos(String tableName,
-            Result.OnTableColumnInfos resultCallback)
-    {
-        ABDatabase.RequestHandler.post(() -> {
-            ABDatabase.Lock.lock();
+    public void getTableColumnInfos(String tableName, Integer transactionId,
+            Result.OnTableColumnInfos resultCallback) {
+        requestHandler.post(() -> {
+            lock.lock();
 
-            Cursor c = ABDatabase.DB.rawQuery("PRAGMA TABLE_INFO('" +
+            String transactionError = validateTransactionId(transactionId);
+            if (transactionId != null) {
+                resultCallback.onError(new ABDatabaseException(
+                        "Cannot get table column infos. " + transactionError));
+                lock.unlock();
+                return;
+            }
+
+            Cursor c = db.rawQuery("PRAGMA TABLE_INFO('" +
                     tableName + "')", null);
             ColumnInfo[] columnInfos = new ColumnInfo[c.getCount()];
 
@@ -100,18 +103,31 @@ public class ABDatabase
                 i++;
             }
 
-            ABDatabase.Lock.unlock();
+            lock.unlock();
 
             resultCallback.onResult(columnInfos);
         });
     }
 
-    public void getTableNames(Result.OnTableNames resultCallback)
-    {
-        ABDatabase.RequestHandler.post(() -> {
-            ABDatabase.Lock.lock();
+    public void getTableColumnInfos(String tableName,
+            Result.OnTableColumnInfos resultCallback) {
+        getTableColumnInfos(tableName, null, resultCallback);
+    }
 
-            Cursor c = ABDatabase.DB.rawQuery(
+    public void getTableNames(Integer transactionId,
+            Result.OnTableNames resultCallback) {
+        requestHandler.post(() -> {
+            lock.lock();
+
+            String transactionError = validateTransactionId(transactionId);
+            if (transactionId != null) {
+                resultCallback.onError(new ABDatabaseException(
+                        "Cannot get table column infos. " + transactionError));
+                lock.unlock();
+                return;
+            }
+
+            Cursor c = db.rawQuery(
                     "SELECT name FROM sqlite_master WHERE" +
                     " type ='table'" +
                     " AND name NOT LIKE 'sqlite_%' AND name NOT LIKE 'android_%'", null);
@@ -123,92 +139,93 @@ public class ABDatabase
                 i++;
             }
 
-            ABDatabase.Lock.unlock();
+            lock.unlock();
 
             resultCallback.onResult(tableNames);
         });
     }
 
+    public void getTableNames(Result.OnTableNames resultCallback) {
+        getTableNames(null, resultCallback);
+    }
+
     public void transaction_Finish(int transactionId, boolean commit,
-            Transaction.OnFinish resultCallback)
-    {
-        if (ABDatabase.isDebug())
+            Transaction.OnFinish resultCallback) {
+        if (isDebug())
             Log.d("ABDatabase", "Transaction - Finish", new Exception());
 
-        ABDatabase.RequestHandler.post(() -> {
-            ABDatabase.Lock.lock();
+        requestHandler.post(() -> {
+            lock.lock();
 
-            if (ABDatabase.Transaction_CurrentId == null) {
-                ABDatabase.Lock.unlock();
+            if (transaction_CurrentId == null) {
+                lock.unlock();
                 resultCallback.onError(new ABDatabaseException(
                         "No transaction in progress."));
                 return;
             }
 
-            if (!ABDatabase.Transaction_CurrentId.equals(transactionId)) {
-                ABDatabase.Lock.unlock();
+            if (!transaction_CurrentId.equals(transactionId)) {
+                lock.unlock();
                 resultCallback.onError(new ABDatabaseException(
                         "Wrong transaction id: " + transactionId +
                         ". Current transaction id: " +
-                        ABDatabase.Transaction_CurrentId + "."));
+                        transaction_CurrentId + "."));
                 return;
             }
 
             if (commit)
-                ABDatabase.DB.setTransactionSuccessful();
-            ABDatabase.DB.endTransaction();
+                db.setTransactionSuccessful();
+            db.endTransaction();
 
-            ABDatabase.Transaction_CurrentId = null;
+            transaction_CurrentId = null;
 
-            ABDatabase.Lock.unlock();
+            lock.unlock();
 
             resultCallback.onResult();
         });
     }
 
     public void transaction_IsAutocommit(
-            Transaction.OnIsAutocommit resultCallback)
-    {
-        if (ABDatabase.isDebug()) {
+            Transaction.OnIsAutocommit resultCallback) {
+        if (isDebug()) {
             Log.d("ABDatabase", "Transaction - Is Autocommit",
                     new Exception());
         }
 
-        ABDatabase.RequestHandler.post(() -> {
-            ABDatabase.Lock.lock();
+        requestHandler.post(() -> {
+            lock.lock();
 
-            boolean inTransaction = ABDatabase.DB.inTransaction();
+            boolean inTransaction = db.inTransaction();
 
-            if (inTransaction != (ABDatabase.Transaction_CurrentId != null)) {
-                ABDatabase.Lock.unlock();
+            if (inTransaction != (transaction_CurrentId != null)) {
+                lock.unlock();
                 resultCallback.onError(new ABDatabaseException(
                         "Transaction id inconsistency."));
                 return;
             }
 
-            ABDatabase.Lock.unlock();
+            lock.unlock();
 
-            resultCallback.onResult(ABDatabase.Transaction_CurrentId);
+            resultCallback.onResult(transaction_CurrentId);
         });
     }
 
     public void transaction_Start(Transaction.OnStart resultCallback,
-            int timeout)
-    {
-        if (ABDatabase.isDebug())
+            int timeout) {
+        if (isDebug())
             Log.d("ABDatabase", "Transaction - Start", new Exception());
 
-        ABDatabase.RequestHandler.post(() -> {
-            ABDatabase.Lock.lock();
+        requestHandler.post(() -> {
+            lock.lock();
 
-            if (ABDatabase.Transaction_CurrentId != null) {
-                ABDatabase.Lock.unlock();
+            if (transaction_CurrentId != null) {
+                lock.unlock();
                 if (timeout <= 0) {
                     resultCallback.onError(new ABDatabaseException(
                             "Other transaction already in progress: " +
-                            ABDatabase.Transaction_CurrentId));
+                            transaction_CurrentId));
                 } else {
-                    ABDatabase.RequestHandler.postDelayed(() -> {
+                    requestHandler.postDelayed(() -> {
                         this.transaction_Start(resultCallback,
                                 timeout - 500);
                     }, 500);
@@ -216,42 +233,40 @@ public class ABDatabase
                 return;
             }
 
-            ABDatabase.DB.beginTransactionNonExclusive();
+            db.beginTransactionNonExclusive();
 
-            ABDatabase.Transaction_CurrentId = ABDatabase.Transaction_NextId;
-            ABDatabase.Transaction_NextId++;
+            transaction_CurrentId = transaction_NextId;
+            transaction_NextId++;
 
-            ABDatabase.Lock.unlock();
+            lock.unlock();
 
-            resultCallback.onResult(ABDatabase.Transaction_CurrentId);
+            resultCallback.onResult(transaction_CurrentId);
         });
     }
 
-    public void transaction_Start(Transaction.OnStart resultCallback)
-    {
+    public void transaction_Start(Transaction.OnStart resultCallback) {
         this.transaction_Start(resultCallback, 0);
     }
 
     public void query_Execute(String query, Integer transactionId,
-            Result.OnResult_ThrowsException resultCallback, int timeout)
-    {
-        if (ABDatabase.isDebug())
+            Result.OnResult_ThrowsException resultCallback, int timeout) {
+        if (isDebug())
             Log.d("ABDatabase", "Execute: " + query, new Exception());
 
-        ABDatabase.RequestHandler.post(() -> {
-            ABDatabase.Lock.lock();
+        requestHandler.post(() -> {
+            lock.lock();
 
             /* Transaction Check */
             if (transactionId == null) {
-                if (ABDatabase.Transaction_CurrentId != null) {
-                    ABDatabase.Lock.unlock();
+                if (transaction_CurrentId != null) {
+                    lock.unlock();
                     if (timeout <= 0) {
                         resultCallback.onError(new ABDatabaseException(
                                 "Transaction in progress: " +
-                                        ABDatabase.Transaction_CurrentId +
+                                        transaction_CurrentId +
                                         ". Cannot run query without transaction: " + query));
                     } else {
-                        ABDatabase.RequestHandler.postDelayed(() -> {
+                        requestHandler.postDelayed(() -> {
                             this.query_Execute(query, transactionId,
                                     resultCallback, timeout - 500);
                         }, 500);
@@ -259,12 +274,12 @@ public class ABDatabase
                     return;
                 }
             } else {
-                if (!ABDatabase.Transaction_CurrentId.equals(transactionId)) {
-                    ABDatabase.Lock.unlock();
+                if (!transaction_CurrentId.equals(transactionId)) {
+                    lock.unlock();
                     resultCallback.onError(new ABDatabaseException(
                             "Wrong transaction id: " + transactionId +
                             ". Current transaction id: " +
-                            ABDatabase.Transaction_CurrentId +
+                            transaction_CurrentId +
                             ". Cannot run query: " + query));
                     return;
                 }
@@ -272,46 +287,44 @@ public class ABDatabase
             /* / Transaction Check */
 
             try {
-                ABDatabase.DB.execSQL(query);
+                db.execSQL(query);
             } catch (SQLiteException e) {
-                ABDatabase.Lock.unlock();
+                lock.unlock();
                 resultCallback.onError(e);
                 return;
             }
 
-            ABDatabase.Lock.unlock();
+            lock.unlock();
 
             resultCallback.onResult();
         });
     }
 
     public void query_Execute(String query, Integer transactionId,
-            Result.OnResult_ThrowsException resultCallback)
-    {
+            Result.OnResult_ThrowsException resultCallback) {
         this.query_Execute(query, transactionId, resultCallback, 0);
     }
 
     public void query_Select(String query, SelectColumnType[] columnTypes,
             Integer transactionId, Result.OnSelect resultCallback,
-            int timeout)
-    {
-        if (ABDatabase.isDebug())
+            int timeout) {
+        if (isDebug())
             Log.d("ABDatabase", "Select: " + query, new Exception());
 
-        ABDatabase.RequestHandler.post(() -> {
-            ABDatabase.Lock.lock();
+        requestHandler.post(() -> {
+            lock.lock();
 
             /* Transaction Check */
             if (transactionId == null) {
-                if (ABDatabase.Transaction_CurrentId != null) {
-                    ABDatabase.Lock.unlock();
+                if (transaction_CurrentId != null) {
+                    lock.unlock();
                     if (timeout <= 0) {
                         resultCallback.onError(new ABDatabaseException(
                                 "Transaction in progress: " +
-                                ABDatabase.Transaction_CurrentId +
+                                transaction_CurrentId +
                                 ". Cannot run query without transaction id: " + query));
                     } else {
-                        ABDatabase.RequestHandler.postDelayed(() -> {
+                        requestHandler.postDelayed(() -> {
                             this.query_Select(query, columnTypes, transactionId,
                                     resultCallback, timeout - 500);
                         }, 500);
@@ -319,12 +332,12 @@ public class ABDatabase
                     return;
                 }
             } else {
-                if (!ABDatabase.Transaction_CurrentId.equals(transactionId)) {
-                    ABDatabase.Lock.unlock();
+                if (!transaction_CurrentId.equals(transactionId)) {
+                    lock.unlock();
                     resultCallback.onError(new ABDatabaseException(
                             "Wrong transaction id: " + transactionId +
                             ". Current transaction id: " +
-                            ABDatabase.Transaction_CurrentId +
+                            transaction_CurrentId +
                             ". Cannot run query: " + query));
                     return;
                 }
@@ -333,9 +346,9 @@ public class ABDatabase
 
             Cursor c = null;
             try {
-                c = ABDatabase.DB.rawQuery(query, null);
+                c = db.rawQuery(query, null);
             } catch (SQLiteException e) {
-                ABDatabase.Lock.unlock();
+                lock.unlock();
                 resultCallback.onError(e);
                 return;
             }
@@ -363,16 +376,16 @@ public class ABDatabase
                             row.put(c.getLong(j));
                         else if (columnTypes[j] == SelectColumnType.String)
                             row.put(c.getString(j));
-                        else {
-                            ABDatabase.Lock.unlock();
-                            resultCallback.onError(new ABDatabaseException(
-                                    "Unknown column type '" + columnTypes[j] +
-                                            "'."));
-                            return;
-                        }
+//                        else {
+//                            Lock.unlock();
+//                            resultCallback.onError(new ABDatabaseException(
+//                                    "Unknown column type '" + columnTypes[j] +
+//                                            "'."));
+//                            return;
+//                        }
                     }
                 } catch (JSONException e) {
-                    ABDatabase.Lock.unlock();
+                    lock.unlock();
                     resultCallback.onError(e);
                     return;
                 }
@@ -380,7 +393,7 @@ public class ABDatabase
                 rows.add(row);
             }
 
-            ABDatabase.Lock.unlock();
+            lock.unlock();
 
             resultCallback.onResult(rows);
         });
@@ -397,17 +410,37 @@ public class ABDatabase
     }
 
     public void query_Select(String query, SelectColumnType[] columnTypes,
-            Integer transactionId, Result.OnSelect resultCallback)
-    {
+            Integer transactionId, Result.OnSelect resultCallback) {
         this.query_Select(query, columnTypes, transactionId, resultCallback,
                 0);
     }
 
     public void query_Select(String query, List<SelectColumnType> columnTypes,
-            Integer transactionId, Result.OnSelect resultCallback)
-    {
+            Integer transactionId, Result.OnSelect resultCallback) {
         this.query_Select(query, columnTypes, transactionId, resultCallback,
                 0);
+    }
+
+
+    private String validateTransactionId(Integer transactionId) {
+        if (transaction_CurrentId == null) {
+            if (transactionId == null)
+                return null;
+
+            return "Wrong transaction id. No current transaction.";
+        }
+
+        if (transactionId == null) {
+            return "Cannot run without transaction. Current transation id: " +
+                    transaction_CurrentId;
+        }
+
+        if (transaction_CurrentId != transactionId) {
+            return "Cannot run with transaction id '" + transactionId +
+                    "'. Current transaction id: " + transaction_CurrentId;
+        }
+
+        return null;
     }
 
 }
