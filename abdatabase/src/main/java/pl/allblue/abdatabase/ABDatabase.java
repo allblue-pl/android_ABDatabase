@@ -84,9 +84,9 @@ public class ABDatabase
             lock.lock();
 
             String transactionError = validateTransactionId(transactionId);
-            if (transactionId != null) {
+            if (transactionError != null) {
                 resultCallback.onError(new ABDatabaseException(
-                        "Cannot get table column infos. " + transactionError));
+                        "Cannot get table column infos -> " + transactionError));
                 lock.unlock();
                 return;
             }
@@ -120,7 +120,7 @@ public class ABDatabase
             lock.lock();
 
             String transactionError = validateTransactionId(transactionId);
-            if (transactionId != null) {
+            if (transactionError != null) {
                 resultCallback.onError(new ABDatabaseException(
                         "Cannot get table column infos. " + transactionError));
                 lock.unlock();
