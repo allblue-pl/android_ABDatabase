@@ -274,6 +274,15 @@ public class ABDatabase
                     return;
                 }
             } else {
+                if (transaction_CurrentId == null) {
+                    lock.unlock();
+                    resultCallback.onError(new ABDatabaseException(
+                            "Wrong transaction id: " + transactionId +
+                                    ". No current transaction." +
+                                    " Cannot run query: " + query));
+                    return;
+                }
+
                 if (!transaction_CurrentId.equals(transactionId)) {
                     lock.unlock();
                     resultCallback.onError(new ABDatabaseException(
@@ -332,6 +341,15 @@ public class ABDatabase
                     return;
                 }
             } else {
+                if (transaction_CurrentId == null) {
+                    lock.unlock();
+                    resultCallback.onError(new ABDatabaseException(
+                            "Wrong transaction id: " + transactionId +
+                                    ". No current transaction." +
+                                    " Cannot run query: " + query));
+                    return;
+                }
+
                 if (!transaction_CurrentId.equals(transactionId)) {
                     lock.unlock();
                     resultCallback.onError(new ABDatabaseException(
