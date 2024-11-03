@@ -389,7 +389,7 @@ public class ABDatabase
                         else if (columnTypes[j] == SelectColumnType.JSON) {
                             String json_Str = c.getString(j);
                             JSONObject json = new JSONObject(json_Str);
-                            row.put(json.get("value"));
+                            row.put(json);
                         } else if (columnTypes[j] == SelectColumnType.Long)
                             row.put(c.getLong(j));
                         else if (columnTypes[j] == SelectColumnType.String)
