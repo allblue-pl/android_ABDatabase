@@ -35,7 +35,7 @@ public class ABDatabase
     }
 
     static public boolean isDebug() {
-        return true;
+        return false;
     }
 
 
