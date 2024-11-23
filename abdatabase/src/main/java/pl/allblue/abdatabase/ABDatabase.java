@@ -102,6 +102,7 @@ public class ABDatabase
                 columnInfos[i] = columnInfo;
                 i++;
             }
+            c.close();
 
             lock.unlock();
 
@@ -138,6 +139,7 @@ public class ABDatabase
                 tableNames[i] = c.getString(0);
                 i++;
             }
+            c.close();
 
             lock.unlock();
 
@@ -410,6 +412,7 @@ public class ABDatabase
 
                 rows.add(row);
             }
+            c.close();
 
             lock.unlock();
 
