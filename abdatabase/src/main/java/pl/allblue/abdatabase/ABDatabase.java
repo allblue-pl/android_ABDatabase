@@ -449,7 +449,7 @@ public class ABDatabase
         }
 
         if (transactionId == null) {
-            return "Cannot run without transaction. Current transation id: " +
+            return "Cannot run without transaction. Current transaction id: " +
                     transaction_CurrentId;
         }
 
