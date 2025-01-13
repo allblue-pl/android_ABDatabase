@@ -1,6 +1,6 @@
 package pl.allblue.abdatabase;
 
-public class Transaction {
+public class DBTransaction {
 
     static public abstract class OnFinish {
         public abstract void onError(Exception e);

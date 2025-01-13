@@ -4,7 +4,7 @@ import org.json.JSONArray;
 
 import java.util.List;
 
-public class Result
+public class DBResult
 {
 
     static public abstract class OnResult {

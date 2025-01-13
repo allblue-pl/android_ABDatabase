@@ -79,7 +79,7 @@ public class ABDatabase
     }
 
     public void getTableColumnInfos(String tableName, Integer transactionId,
-            Result.OnTableColumnInfos resultCallback) {
+            DBResult.OnTableColumnInfos resultCallback) {
         requestHandler.post(() -> {
             lock.lock();
 
@@ -111,12 +111,12 @@ public class ABDatabase
     }
 
     public void getTableColumnInfos(String tableName,
-            Result.OnTableColumnInfos resultCallback) {
+            DBResult.OnTableColumnInfos resultCallback) {
         getTableColumnInfos(tableName, null, resultCallback);
     }
 
     public void getTableNames(Integer transactionId,
-            Result.OnTableNames resultCallback) {
+            DBResult.OnTableNames resultCallback) {
         requestHandler.post(() -> {
             lock.lock();
 
@@ -147,12 +147,12 @@ public class ABDatabase
         });
     }
 
-    public void getTableNames(Result.OnTableNames resultCallback) {
+    public void getTableNames(DBResult.OnTableNames resultCallback) {
         getTableNames(null, resultCallback);
     }
 
     public void transaction_Finish(int transactionId, boolean commit,
-            Transaction.OnFinish resultCallback) {
+            DBTransaction.OnFinish resultCallback) {
         if (isDebug())
             Log.d("ABDatabase", "Transaction - Finish", new Exception());
 
@@ -188,7 +188,7 @@ public class ABDatabase
     }
 
     public void transaction_IsAutocommit(
-            Transaction.OnIsAutocommit resultCallback) {
+            DBTransaction.OnIsAutocommit resultCallback) {
         if (isDebug()) {
             Log.d("ABDatabase", "Transaction - Is Autocommit",
                     new Exception());
@@ -212,7 +212,7 @@ public class ABDatabase
         });
     }
 
-    public void transaction_Start(Transaction.OnStart resultCallback,
+    public void transaction_Start(DBTransaction.OnStart resultCallback,
             int timeout) {
         if (isDebug())
             Log.d("ABDatabase", "Transaction - Start", new Exception());
@@ -246,12 +246,12 @@ public class ABDatabase
         });
     }
 
-    public void transaction_Start(Transaction.OnStart resultCallback) {
+    public void transaction_Start(DBTransaction.OnStart resultCallback) {
         this.transaction_Start(resultCallback, 0);
     }
 
     public void query_Execute(String query, Integer transactionId,
-            Result.OnResult_ThrowsException resultCallback, int timeout) {
+            DBResult.OnResult_ThrowsException resultCallback, int timeout) {
         if (isDebug())
             Log.d("ABDatabase", "Execute: " + query, new Exception());
 
@@ -312,12 +312,12 @@ public class ABDatabase
     }
 
     public void query_Execute(String query, Integer transactionId,
-            Result.OnResult_ThrowsException resultCallback) {
+            DBResult.OnResult_ThrowsException resultCallback) {
         this.query_Execute(query, transactionId, resultCallback, 0);
     }
 
     public void query_Select(String query, SelectColumnType[] columnTypes,
-            Integer transactionId, Result.OnSelect resultCallback,
+            Integer transactionId, DBResult.OnSelect resultCallback,
             int timeout) {
         if (isDebug())
             Log.d("ABDatabase", "Select: " + query, new Exception());
@@ -421,7 +421,7 @@ public class ABDatabase
     }
 
     public void query_Select(String query, List<SelectColumnType> columnTypes,
-            Integer transactionId, Result.OnSelect resultCallback,
+            Integer transactionId, DBResult.OnSelect resultCallback,
             int timeout) {
         SelectColumnType[] columnTypesArr =
                 new SelectColumnType[columnTypes.size()];
@@ -431,13 +431,13 @@ public class ABDatabase
     }
 
     public void query_Select(String query, SelectColumnType[] columnTypes,
-            Integer transactionId, Result.OnSelect resultCallback) {
+            Integer transactionId, DBResult.OnSelect resultCallback) {
         this.query_Select(query, columnTypes, transactionId, resultCallback,
                 0);
     }
 
     public void query_Select(String query, List<SelectColumnType> columnTypes,
-            Integer transactionId, Result.OnSelect resultCallback) {
+            Integer transactionId, DBResult.OnSelect resultCallback) {
         this.query_Select(query, columnTypes, transactionId, resultCallback,
                 0);
     }
