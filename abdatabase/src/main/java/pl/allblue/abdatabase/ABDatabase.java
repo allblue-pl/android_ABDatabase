@@ -78,6 +78,10 @@ public class ABDatabase
         });
     }
 
+    public void close() {
+        close(null);
+    }
+
     public void getTableColumnInfos(String tableName, Integer transactionId,
             DBResult.OnTableColumnInfos resultCallback) {
         requestHandler.post(() -> {
