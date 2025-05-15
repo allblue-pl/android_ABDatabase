@@ -166,14 +166,14 @@ public class ABDatabase
             if (transaction_CurrentId == null) {
                 lock.unlock();
                 resultCallback.onError(new ABDatabaseException(
-                        "No transaction in progress."));
+                        "Cannot finish transaction. No transaction in progress."));
                 return;
             }
 
             if (!transaction_CurrentId.equals(transactionId)) {
                 lock.unlock();
                 resultCallback.onError(new ABDatabaseException(
-                        "Wrong transaction id: " + transactionId +
+                        "Cannot finish transaction. Wrong transaction id: " + transactionId +
                         ". Current transaction id: " +
                         transaction_CurrentId + "."));
                 return;
@@ -206,7 +206,7 @@ public class ABDatabase
             if (inTransaction != (transaction_CurrentId != null)) {
                 lock.unlock();
                 resultCallback.onError(new ABDatabaseException(
-                        "Transaction id inconsistency."));
+                        "Cannot determine autocommit. Transaction id inconsistency."));
                 return;
             }
 
@@ -228,7 +228,7 @@ public class ABDatabase
                 lock.unlock();
                 if (timeout <= 0) {
                     resultCallback.onError(new ABDatabaseException(
-                            "Other transaction already in progress: " +
+                            "Cannot start transaction. Other transaction already in progress: " +
                             transaction_CurrentId));
                 } else {
                     requestHandler.postDelayed(() -> {
@@ -270,7 +270,7 @@ public class ABDatabase
                         resultCallback.onError(new ABDatabaseException(
                                 "Transaction in progress: " +
                                         transaction_CurrentId +
-                                        ". Cannot run query without transaction: " + query));
+                                        ". Cannot exectute query without transaction: " + query));
                     } else {
                         requestHandler.postDelayed(() -> {
                             this.query_Execute(query, transactionId,
@@ -285,7 +285,7 @@ public class ABDatabase
                     resultCallback.onError(new ABDatabaseException(
                             "Wrong transaction id: " + transactionId +
                                     ". No current transaction." +
-                                    " Cannot run query: " + query));
+                                    " Cannot execute query: " + query));
                     return;
                 }
 
@@ -295,7 +295,7 @@ public class ABDatabase
                             "Wrong transaction id: " + transactionId +
                             ". Current transaction id: " +
                             transaction_CurrentId +
-                            ". Cannot run query: " + query));
+                            ". Cannot execute query: " + query));
                     return;
                 }
             }
@@ -337,7 +337,7 @@ public class ABDatabase
                         resultCallback.onError(new ABDatabaseException(
                                 "Transaction in progress: " +
                                 transaction_CurrentId +
-                                ". Cannot run query without transaction id: " + query));
+                                ". Cannot select query without transaction id: " + query));
                     } else {
                         requestHandler.postDelayed(() -> {
                             this.query_Select(query, columnTypes, transactionId,
@@ -352,7 +352,7 @@ public class ABDatabase
                     resultCallback.onError(new ABDatabaseException(
                             "Wrong transaction id: " + transactionId +
                                     ". No current transaction." +
-                                    " Cannot run query: " + query));
+                                    " Cannot select query: " + query));
                     return;
                 }
 
@@ -362,7 +362,7 @@ public class ABDatabase
                             "Wrong transaction id: " + transactionId +
                             ". Current transaction id: " +
                             transaction_CurrentId +
-                            ". Cannot run query: " + query));
+                            ". Cannot select query: " + query));
                     return;
                 }
             }
