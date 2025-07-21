@@ -14,6 +14,7 @@ import org.json.JSONObject;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import java.util.concurrent.locks.ReentrantLock;
 
 public class ABDatabase
@@ -39,7 +40,7 @@ public class ABDatabase
     }
 
 
-    public ABDatabase(final Context context) {
+    public ABDatabase(final Context context, String localeLanguageTag) {
         if (ABDatabase.lock == null)
             ABDatabase.lock = new ReentrantLock();
         ABDatabase.lock.lock();
@@ -57,6 +58,7 @@ public class ABDatabase
         if (ABDatabase.db == null) {
             ABDatabase.db = ABDatabase.dbHelper.getWritableDatabase();
             ABDatabase.db.enableWriteAheadLogging();
+            ABDatabase.db.setLocale(Locale.forLanguageTag(localeLanguageTag));
 
             ABDatabase.transaction_CurrentId = null;
         }
