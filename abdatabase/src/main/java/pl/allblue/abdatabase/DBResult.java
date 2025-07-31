@@ -7,6 +7,11 @@ import java.util.List;
 public class DBResult
 {
 
+    static public abstract class OnIndexColumnInfos {
+        public abstract void onError(Exception e);
+        public abstract void onResult(IndexColumnInfo[] indexColumnInfos);
+    }
+
     static public abstract class OnResult {
         public abstract void onResult();
     }
@@ -24,6 +29,11 @@ public class DBResult
     static public abstract class OnTableColumnInfos {
         public abstract void onError(Exception e);
         public abstract void onResult(ColumnInfo[] columnInfos);
+    }
+
+    static public abstract class OnTableIndexInfos {
+        public abstract void onError(Exception e);
+        public abstract void onResult(IndexInfo[] indexInfos);
     }
 
     static public abstract class OnTableNames {

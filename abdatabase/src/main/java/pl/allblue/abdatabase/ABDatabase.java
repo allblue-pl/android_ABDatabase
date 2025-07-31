@@ -84,8 +84,42 @@ public class ABDatabase
         close(null);
     }
 
+    public void getIndexColumnInfos(String indexName, Integer transactionId,
+                                    DBResult.OnIndexColumnInfos resultCallback) {
+        requestHandler.post(() -> {
+            lock.lock();
+
+            String transactionError = validateTransactionId(transactionId);
+            if (transactionError != null) {
+                resultCallback.onError(new ABDatabaseException(
+                        "Cannot get index info -> " + transactionError));
+                lock.unlock();
+                return;
+            }
+
+            Cursor c = db.rawQuery("PRAGMA INDEX_XINFO('" +
+                    indexName + "')", null);
+            List<IndexColumnInfo> indexColumnInfos = new ArrayList<>();
+
+            int i = 0;
+            while (c.moveToNext()) {
+                if (c.isNull(2))
+                    continue;
+
+                IndexColumnInfo indexColumnInfo = new IndexColumnInfo(c.getInt(0),
+                        c.getString(2), c.getInt(3) != 0);
+                indexColumnInfos.add(indexColumnInfo);
+            }
+            c.close();
+
+            lock.unlock();
+
+            resultCallback.onResult(indexColumnInfos.toArray(new IndexColumnInfo[0]));
+        });
+    }
+
     public void getTableColumnInfos(String tableName, Integer transactionId,
-            DBResult.OnTableColumnInfos resultCallback) {
+                                    DBResult.OnTableColumnInfos resultCallback) {
         requestHandler.post(() -> {
             lock.lock();
 
@@ -113,6 +147,38 @@ public class ABDatabase
             lock.unlock();
 
             resultCallback.onResult(columnInfos);
+        });
+    }
+
+    public void getTableIndexInfos(String tableName, Integer transactionId,
+                                   DBResult.OnTableIndexInfos resultCallback) {
+        requestHandler.post(() -> {
+            lock.lock();
+
+            String transactionError = validateTransactionId(transactionId);
+            if (transactionError != null) {
+                resultCallback.onError(new ABDatabaseException(
+                        "Cannot get table column infos -> " + transactionError));
+                lock.unlock();
+                return;
+            }
+
+            Cursor c = db.rawQuery("PRAGMA INDEX_LIST('" +
+                    tableName + "')", null);
+            IndexInfo[] indexInfos = new IndexInfo[c.getCount()];
+
+            int i = 0;
+            while (c.moveToNext()) {
+                IndexInfo indexInfo = new IndexInfo(c.getString(1),
+                        c.getString(3).equals("pk"));
+                indexInfos[i] = indexInfo;
+                i++;
+            }
+            c.close();
+
+            lock.unlock();
+
+            resultCallback.onResult(indexInfos);
         });
     }
 
@@ -371,54 +437,53 @@ public class ABDatabase
             /* / Transaction Check */
 
             Cursor c = null;
+            List<JSONArray> rows = new ArrayList<>();
             try {
                 c = db.rawQuery(query, null);
+
+                int i = 0;
+                while (c.moveToNext()) {
+                    JSONArray row = new JSONArray();
+                    try {
+                        for (int j = 0; j < columnTypes.length; j++) {
+                            if (c.isNull(j))
+                                row.put(JSONObject.NULL);
+                            else if (columnTypes[j] == SelectColumnType.Bool)
+                                row.put(c.getInt(j) == 1);
+                            else if (columnTypes[j] == SelectColumnType.Float)
+                                row.put(c.getFloat(j));
+                            else if (columnTypes[j] == SelectColumnType.Int)
+                                row.put(c.getInt(j));
+                            else if (columnTypes[j] == SelectColumnType.JSON) {
+                                String json_Str = c.getString(j);
+                                JSONObject json = new JSONObject(json_Str);
+                                row.put(json);
+                            } else if (columnTypes[j] == SelectColumnType.Long)
+                                row.put(c.getLong(j));
+                            else if (columnTypes[j] == SelectColumnType.String)
+                                row.put(c.getString(j));
+    //                        else {
+    //                            Lock.unlock();
+    //                            resultCallback.onError(new ABDatabaseException(
+    //                                    "Unknown column type '" + columnTypes[j] +
+    //                                            "'."));
+    //                            return;
+    //                        }
+                        }
+                    } catch (JSONException e) {
+                        lock.unlock();
+                        resultCallback.onError(e);
+                        return;
+                    }
+
+                    rows.add(row);
+                }
+                c.close();
             } catch (SQLiteException e) {
                 lock.unlock();
                 resultCallback.onError(e);
                 return;
             }
-
-            List<JSONArray> rows = new ArrayList<>();
-
-            int i = 0;
-            while (c.moveToNext()) {
-                JSONArray row = new JSONArray();
-                try {
-                    for (int j = 0; j < columnTypes.length; j++) {
-                        if (c.isNull(j))
-                            row.put(JSONObject.NULL);
-                        else if (columnTypes[j] == SelectColumnType.Bool)
-                            row.put(c.getInt(j) == 1);
-                        else if (columnTypes[j] == SelectColumnType.Float)
-                            row.put(c.getFloat(j));
-                        else if (columnTypes[j] == SelectColumnType.Int)
-                            row.put(c.getInt(j));
-                        else if (columnTypes[j] == SelectColumnType.JSON) {
-                            String json_Str = c.getString(j);
-                            JSONObject json = new JSONObject(json_Str);
-                            row.put(json);
-                        } else if (columnTypes[j] == SelectColumnType.Long)
-                            row.put(c.getLong(j));
-                        else if (columnTypes[j] == SelectColumnType.String)
-                            row.put(c.getString(j));
-//                        else {
-//                            Lock.unlock();
-//                            resultCallback.onError(new ABDatabaseException(
-//                                    "Unknown column type '" + columnTypes[j] +
-//                                            "'."));
-//                            return;
-//                        }
-                    }
-                } catch (JSONException e) {
-                    lock.unlock();
-                    resultCallback.onError(e);
-                    return;
-                }
-
-                rows.add(row);
-            }
-            c.close();
 
             lock.unlock();
 
@@ -462,9 +527,10 @@ public class ABDatabase
                     transaction_CurrentId;
         }
 
-        if (transaction_CurrentId != transactionId) {
+        if (!transaction_CurrentId.equals(transactionId)) {
+            Log.d("Test", transaction_CurrentId.toString() + ":" + transactionId);
             return "Cannot run with transaction id '" + transactionId +
-                    "'. Current transaction id: " + transaction_CurrentId;
+                    "''. Current transaction id: '" + transaction_CurrentId + "'.";
         }
 
         return null;
