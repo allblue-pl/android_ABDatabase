@@ -138,7 +138,7 @@ public class ABDatabase
             int i = 0;
             while (c.moveToNext()) {
                 ColumnInfo columnInfo = new ColumnInfo(c.getString(1),
-                        c.getString(2), c.getInt(3) != 0);
+                        c.getString(2), c.getInt(3) != 0, c.getInt(5) != 0);
                 columnInfos[i] = columnInfo;
                 i++;
             }
